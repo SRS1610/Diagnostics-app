@@ -38,12 +38,38 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
- * Restricts a route to master_admin only — use for tenant CRUD,
- * cross-tenant analytics, and license provisioning at the platform level.
+ * Restricts a route to master_admin only. Used for the transition routes
+ * themselves (enter/exit tenant view), where checking role alone is
+ * correct — those routes exist precisely to change viewingTenantId.
+ * For genuinely cross-tenant resources (tenant CRUD, platform analytics),
+ * use requireMasterConsole below instead, which additionally confirms
+ * the session isn't currently "inside" a tenant's view.
  */
 export function requireMasterAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.portalSession?.role !== "master_admin") {
     return res.status(403).json({ error: "Master admin access required" });
+  }
+  next();
+}
+
+/**
+ * Restricts a route to genuine Master Console context: master_admin AND
+ * viewingTenantId === null. A master_admin who has called
+ * /auth/enter-tenant-view is deliberately "inside" one tenant's view for
+ * support purposes — CLAUDE.md requires that context never be blurred
+ * with the cross-tenant Master Console, so master-console-only routes
+ * (tenant CRUD, platform-wide analytics) must reject a session that's
+ * currently scoped into a tenant, even though its role is still
+ * master_admin. Call /auth/exit-tenant-view first to clear it.
+ */
+export function requireMasterConsole(req: Request, res: Response, next: NextFunction) {
+  if (req.portalSession?.role !== "master_admin") {
+    return res.status(403).json({ error: "Master admin access required" });
+  }
+  if (req.portalSession.viewingTenantId !== null) {
+    return res.status(400).json({
+      error: "This action requires Master Console context. Call /auth/exit-tenant-view first.",
+    });
   }
   next();
 }

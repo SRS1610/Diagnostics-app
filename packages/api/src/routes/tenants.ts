@@ -1,30 +1,35 @@
 // src/routes/tenants.ts
 //
-// Tenant CRUD — master_admin only. Tenant is the top-level entity, so
-// these routes are a genuine cross-tenant exception to the
-// requireTenantScope pattern in routes/reports.ts: there is no single
-// tenant to scope to here, by design. Every route below uses
-// requireMasterAdmin instead, and every state-changing action logs to
-// ActivityLogEntry via logActivity (tenantId set to the tenant acted on,
-// not the actor's — see adminActivityLog.ts / tenant.ts).
+// Tenant CRUD — master_admin only, and only in genuine Master Console
+// context (requireMasterConsole rejects a session that's currently
+// "inside" a tenant's view via /auth/enter-tenant-view — see
+// middleware/auth.ts). Tenant is the top-level entity, so these routes
+// are a deliberate exception to the requireTenantScope pattern in
+// routes/reports.ts: there is no single tenant to scope to here.
+//
+// Activity logging follows adminActivityLog.ts's documented convention:
+// tenantId is null for the platform-level tenant_created action (there
+// is no tenant yet at creation time), but is the affected tenant's ID
+// for tenant_suspended/tenant_activated — matching the reference
+// implementation in tenant.ts.
 
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import { logActivity } from "@diagnostics/shared";
-import { requireAuth, requireMasterAdmin } from "../middleware/auth";
+import { requireAuth, requireMasterConsole } from "../middleware/auth";
+import { buildActivityLogData } from "../lib/activityLog";
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Cross-tenant list — legitimate Master Console aggregate view.
-router.get("/", requireAuth, requireMasterAdmin, async (_req, res) => {
+router.get("/", requireAuth, requireMasterConsole, async (_req, res) => {
   const tenants = await prisma.tenant.findMany({
     orderBy: { createdAt: "desc" },
   });
   res.json(tenants);
 });
 
-router.get("/:tenantId", requireAuth, requireMasterAdmin, async (req, res) => {
+router.get("/:tenantId", requireAuth, requireMasterConsole, async (req, res) => {
   const tenant = await prisma.tenant.findUnique({
     where: { tenantId: req.params.tenantId },
   });
@@ -32,7 +37,7 @@ router.get("/:tenantId", requireAuth, requireMasterAdmin, async (req, res) => {
   res.json(tenant);
 });
 
-router.post("/", requireAuth, requireMasterAdmin, async (req, res) => {
+router.post("/", requireAuth, requireMasterConsole, async (req, res) => {
   const { companyName, primaryContactEmail } = req.body;
   if (!companyName || !primaryContactEmail) {
     return res.status(400).json({ error: "companyName and primaryContactEmail are required" });
@@ -43,8 +48,8 @@ router.post("/", requireAuth, requireMasterAdmin, async (req, res) => {
   });
 
   await prisma.activityLogEntry.create({
-    data: logActivity({
-      tenantId: tenant.tenantId,
+    data: buildActivityLogData({
+      tenantId: null, // platform-level action — see adminActivityLog.ts
       actorUserId: req.portalSession!.userId,
       actorRole: "master_admin",
       action: "tenant_created",
@@ -57,7 +62,7 @@ router.post("/", requireAuth, requireMasterAdmin, async (req, res) => {
   res.status(201).json(tenant);
 });
 
-router.patch("/:tenantId/suspend", requireAuth, requireMasterAdmin, async (req, res) => {
+router.patch("/:tenantId/suspend", requireAuth, requireMasterConsole, async (req, res) => {
   const tenant = await prisma.tenant.findUnique({ where: { tenantId: req.params.tenantId } });
   if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
@@ -67,7 +72,7 @@ router.patch("/:tenantId/suspend", requireAuth, requireMasterAdmin, async (req, 
   });
 
   await prisma.activityLogEntry.create({
-    data: logActivity({
+    data: buildActivityLogData({
       tenantId: updated.tenantId,
       actorUserId: req.portalSession!.userId,
       actorRole: "master_admin",
@@ -81,7 +86,7 @@ router.patch("/:tenantId/suspend", requireAuth, requireMasterAdmin, async (req, 
   res.json(updated);
 });
 
-router.patch("/:tenantId/activate", requireAuth, requireMasterAdmin, async (req, res) => {
+router.patch("/:tenantId/activate", requireAuth, requireMasterConsole, async (req, res) => {
   const tenant = await prisma.tenant.findUnique({ where: { tenantId: req.params.tenantId } });
   if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
@@ -91,7 +96,7 @@ router.patch("/:tenantId/activate", requireAuth, requireMasterAdmin, async (req,
   });
 
   await prisma.activityLogEntry.create({
-    data: logActivity({
+    data: buildActivityLogData({
       tenantId: updated.tenantId,
       actorUserId: req.portalSession!.userId,
       actorRole: "master_admin",

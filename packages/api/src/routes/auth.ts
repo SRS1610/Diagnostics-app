@@ -9,8 +9,8 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
-import { logActivity } from "@diagnostics/shared";
 import { requireAuth, requireMasterAdmin } from "../middleware/auth";
+import { buildActivityLogData } from "../lib/activityLog";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -37,7 +37,7 @@ router.post("/login", async (req, res) => {
   );
 
   await prisma.activityLogEntry.create({
-    data: logActivity({
+    data: buildActivityLogData({
       tenantId: user.tenantId,
       actorUserId: user.userId,
       actorRole: user.role as any,
@@ -60,7 +60,7 @@ router.post("/enter-tenant-view", requireAuth, requireMasterAdmin, async (req, r
   if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
   await prisma.activityLogEntry.create({
-    data: logActivity({
+    data: buildActivityLogData({
       tenantId,
       actorUserId: req.portalSession!.userId,
       actorRole: "master_admin",
@@ -79,6 +79,34 @@ router.post("/enter-tenant-view", requireAuth, requireMasterAdmin, async (req, r
   );
 
   res.json({ token, viewingTenantId: tenantId });
+});
+
+// Master admin only — leaves tenant-support view, returning to Master
+// Console context (viewingTenantId: null). Required before any
+// requireMasterConsole-gated route (tenant CRUD, platform analytics)
+// will accept the session again — see middleware/auth.ts.
+router.post("/exit-tenant-view", requireAuth, requireMasterAdmin, async (req, res) => {
+  const previousTenantId = req.portalSession!.viewingTenantId;
+
+  await prisma.activityLogEntry.create({
+    data: buildActivityLogData({
+      tenantId: previousTenantId,
+      actorUserId: req.portalSession!.userId,
+      actorRole: "master_admin",
+      action: "exited_tenant_view",
+      targetType: "tenant",
+      targetId: previousTenantId ?? "platform",
+      details: "Master admin exited tenant view",
+    }),
+  });
+
+  const token = jwt.sign(
+    { userId: req.portalSession!.userId, role: "master_admin", tenantId: null, viewingTenantId: null },
+    JWT_SECRET,
+    { expiresIn: "12h" }
+  );
+
+  res.json({ token, viewingTenantId: null });
 });
 
 export default router;
