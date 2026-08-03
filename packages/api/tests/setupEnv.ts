@@ -18,6 +18,8 @@ process.env.DATABASE_URL =
 // technician ever would. Raised here only; production keeps the default.
 process.env.BADGE_LOGIN_RATE_LIMIT = process.env.BADGE_LOGIN_RATE_LIMIT ?? "100000";
 process.env.PIN_LOOKUP_RATE_LIMIT = process.env.PIN_LOOKUP_RATE_LIMIT ?? "100000";
+process.env.PUBLIC_TRACKER_RATE_LIMIT = process.env.PUBLIC_TRACKER_RATE_LIMIT ?? "100000";
+process.env.PUBLIC_TRACKER_WRITE_RATE_LIMIT = process.env.PUBLIC_TRACKER_WRITE_RATE_LIMIT ?? "100000";
 
 if (!/_test(\?|$)/.test(process.env.DATABASE_URL)) {
   throw new Error(

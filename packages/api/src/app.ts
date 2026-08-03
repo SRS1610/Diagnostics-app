@@ -39,6 +39,7 @@ import invoicesRoutes from "./routes/invoices";
 import quotesRoutes from "./routes/quotes";
 import batchesRoutes from "./routes/batches";
 import listingsRoutes from "./routes/listings";
+import publicTrackerRoutes from "./routes/publicTracker";
 
 export function createApp() {
   const app = express();
@@ -66,6 +67,11 @@ export function createApp() {
   app.use("/quotes", quotesRoutes);
   app.use("/batches", batchesRoutes);
   app.use("/listings", listingsRoutes);
+  // The consumer tracker. Mounted under its own prefix so that "is this
+  // route authenticated?" is answerable from the URL alone — anything
+  // under /public is not, everything else is. See publicTracker.ts for
+  // the rules that replace requireAuth + requireTenantScope there.
+  app.use("/public/track", publicTrackerRoutes);
 
   // Catch-all error handler. Must be registered AFTER all routes, and must
   // take four arguments — that arity is how Express identifies it.

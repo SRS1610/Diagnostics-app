@@ -118,6 +118,9 @@ export interface Report {
   results: DiagnosticResult[];
   overallStatus: "pass" | "fail" | "pass_with_warnings";
   routing: string | null;
+  /** The customer's tracker capability. Optional because the list
+   *  endpoint may omit it; the detail endpoint returns it. */
+  consumerToken?: string;
 }
 
 export interface DiagnosticResult {

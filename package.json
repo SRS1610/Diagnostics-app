@@ -5,7 +5,8 @@
   "workspaces": [
     "packages/shared",
     "packages/api",
-    "packages/portal"
+    "packages/portal",
+    "packages/consumer"
   ],
   "scripts": {
     "dev:api": "npm run dev --workspace=packages/api",
@@ -13,7 +14,8 @@
     "build:shared": "npm run build --workspace=packages/shared",
     "db:generate": "npm run db:generate --workspace=packages/api",
     "db:migrate": "npm run db:migrate --workspace=packages/api",
-    "db:studio": "npm run db:studio --workspace=packages/api"
+    "db:studio": "npm run db:studio --workspace=packages/api",
+    "dev:consumer": "npm run dev --workspace=packages/consumer"
   },
   "devDependencies": {
     "typescript": "^5.5.4"

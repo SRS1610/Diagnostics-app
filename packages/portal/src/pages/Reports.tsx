@@ -6,9 +6,15 @@
 // identically to a machine-read one, and that rule applies to the portal
 // as much as to the PDF.
 
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type DiagnosticResult, type Report } from "../api/client";
 import { AsyncBoundary, StatusBadge, formatDate, useApi } from "../components/common";
+
+// Where the consumer app is deployed. Deliberately a SEPARATE origin
+// from this portal: a consumer page and a staff session must never share
+// a bundle or a storage area.
+const CONSUMER_BASE_URL = import.meta.env.VITE_CONSUMER_BASE_URL ?? "http://localhost:5174";
 
 const SOURCE_LABEL: Record<string, string> = {
   api: "Measured",
@@ -111,6 +117,8 @@ function ReportDetail({ report }: { report: Report }) {
         </div>
       </div>
 
+      <ConsumerLink consumerToken={report.consumerToken} />
+
       {flagged.length > 0 && (
         <>
           <h2 style={{ fontSize: 15, margin: "0 0 10px" }}>Flagged items</h2>
@@ -162,5 +170,71 @@ function ReportDetail({ report }: { report: Report }) {
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * The customer's tracker link.
+ *
+ * This is a capability: whoever holds it can see this device's summary
+ * and act on its offer. So it is shown deliberately rather than printed
+ * across the page — staff need to hand it to one customer, and a link
+ * left open on a shared terminal is the way it gets handed to someone
+ * else. Hidden by default, revealed on request, with the consequence
+ * stated next to the button rather than left to be inferred.
+ */
+function ConsumerLink({ consumerToken }: { consumerToken?: string }) {
+  const [revealed, setRevealed] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  if (!consumerToken) return null;
+  const url = `${CONSUMER_BASE_URL}/track/${consumerToken}`;
+
+  return (
+    <div className="card" style={{ marginBottom: 22 }}>
+      <div className="row-between">
+        <div>
+          <div className="stat-label">Customer tracker link</div>
+          <p className="muted" style={{ fontSize: 12.5, margin: "6px 0 0", maxWidth: 560 }}>
+            Anyone with this link can see this device's summary and accept, decline or dispute its offer — no sign-in.
+            Send it to the customer only.
+          </p>
+        </div>
+        {!revealed && (
+          <button className="btn btn-secondary btn-sm" onClick={() => setRevealed(true)}>Show link</button>
+        )}
+      </div>
+
+      {revealed && (
+        <>
+          <code
+            style={{
+              display: "block",
+              marginTop: 12,
+              padding: 12,
+              background: "var(--panel-soft)",
+              borderRadius: 8,
+              fontSize: 12.5,
+              wordBreak: "break-all",
+            }}
+          >
+            {url}
+          </code>
+          <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                void navigator.clipboard?.writeText(url).then(() => setCopied(true));
+              }}
+            >
+              {copied ? "Copied" : "Copy link"}
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setRevealed(false); setCopied(false); }}>
+              Hide
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

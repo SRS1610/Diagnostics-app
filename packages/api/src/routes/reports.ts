@@ -19,6 +19,7 @@ import { computeOverallStatus, DiagnosticResult } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { requireTechnicianAuth, technicianTenantWhere } from "../middleware/technicianAuth";
+import { mintConsumerToken } from "../lib/consumerToken";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -204,6 +205,12 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
         results: validated.value as unknown as object[],
         overallStatus: computeOverallStatus(validated.value),
         routing: (routing as string | undefined) ?? null,
+        // Minted server-side, at creation, so a consumer link exists for
+        // every report without a later backfill step that could be
+        // skipped. Never derived from reportId or anything else a caller
+        // can see: this token IS the authorisation for the public
+        // tracker, so guessing one must be as hard as guessing a key.
+        consumerToken: mintConsumerToken(),
       },
     });
   } catch (e) {

@@ -8,6 +8,7 @@
 
 import bcrypt from "bcrypt";
 import { PrismaClient } from "@prisma/client";
+import { mintConsumerToken } from "../src/lib/consumerToken";
 
 export const prisma = new PrismaClient();
 
@@ -23,6 +24,10 @@ export interface TenantFixture {
   badgeCode: string;
   licenseId: string;
   reportId: string;
+  /** The report's consumer-tracker capability token. Exposed so tests
+   *  can drive the public routes and, crucially, so one tenant's token
+   *  can be tried against the other's data. */
+  consumerToken: string;
 }
 
 export interface Fixtures {
@@ -105,6 +110,7 @@ async function seedTenant(name: string, pin: string, badgeCode: string): Promise
       captureSource: "barcode",
       results: [],
       overallStatus: "pass",
+      consumerToken: mintConsumerToken(),
     },
   });
 
@@ -130,6 +136,7 @@ async function seedTenant(name: string, pin: string, badgeCode: string): Promise
     badgeCode,
     licenseId: license.licenseId,
     reportId: report.reportId,
+    consumerToken: report.consumerToken,
   };
 }
 

@@ -152,6 +152,20 @@ model Report {
   overallStatus String // pass | fail | pass_with_warnings
   routing       String? // resale | repair | parts_harvest | recycle | hold_ineligible
 
+  // Capability token for the consumer-facing tracker and the QR-linked
+  // public summary. Unauthenticated callers reach exactly one report
+  // through this and nothing else — it is the ONLY way a request with no
+  // portal or technician session can read anything, so it must be
+  // unguessable (32 random bytes) rather than derived from the reportId.
+  // The token identifies the tenant too, which is why no public route
+  // ever accepts a tenantId from the caller.
+  consumerToken String @unique
+
+  // A consumer who declines their offer. Distinct from "no quote yet"
+  // and from an expired quote, because those need different next steps
+  // and a tracker that conflates them tells the customer nothing.
+  offerDeclinedAt DateTime?
+
   revisions       ReportRevision[]
   wipeCertificate DataWipeCertificate?
   warrantyClaims  WarrantyClaim[]
