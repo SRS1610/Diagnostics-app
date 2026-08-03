@@ -32,3 +32,6 @@ jest.mock('react-native-device-info', () => ({
 jest.mock('@react-native-ml-kit/text-recognition', () => ({
   recognize: jest.fn().mockResolvedValue({ text: '', blocks: [] }),
 }));
+
+// The library ships its own mock for exactly this purpose.
+jest.mock('react-native-sensors', () => require('react-native-sensors/mock'));

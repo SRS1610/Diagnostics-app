@@ -15,6 +15,7 @@ export type RootStackParamList = {
   FindYourId: undefined;
   Confirm: undefined;
   Checklist: undefined;
+  RunTest: { testId: string };
   MotionTest: undefined;
   SoundCheck: undefined;
   BatteryHealth: undefined;
@@ -35,6 +36,7 @@ export const SCREEN_ORDER: (keyof RootStackParamList)[] = [
   'FindYourId',
   'Confirm',
   'Checklist',
+  'RunTest',
   'MotionTest',
   'SoundCheck',
   'BatteryHealth',

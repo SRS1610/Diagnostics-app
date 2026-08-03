@@ -10,6 +10,8 @@ import { ScanProfileScreen } from '../screens/ScanProfileScreen';
 import { LicenseCheckScreen } from '../screens/LicenseCheckScreen';
 import { FindYourIdScreen } from '../screens/FindYourIdScreen';
 import { ConfirmScreen } from '../screens/ConfirmScreen';
+import { ChecklistScreen } from '../screens/ChecklistScreen';
+import { RunTestScreen } from '../screens/RunTestScreen';
 import { ResultsScreen } from '../screens/ResultsScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 
@@ -21,6 +23,8 @@ const BUILT_SCREENS: Partial<Record<keyof RootStackParamList, React.ComponentTyp
   LicenseCheck: LicenseCheckScreen,
   FindYourId: FindYourIdScreen,
   Confirm: ConfirmScreen,
+  Checklist: ChecklistScreen,
+  RunTest: RunTestScreen,
   Results: ResultsScreen,
 };
 
