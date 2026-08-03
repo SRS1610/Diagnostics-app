@@ -167,6 +167,11 @@ model ReportRevision {
   testIdsRedone          String[]
   reason                 String?
 
+  // Revision numbers must be unique and gapless per report — they are
+  // rendered as DDA-0217-R1, -R2 and referenced by testSession.ts. A
+  // count-then-insert cannot guarantee that under READ COMMITTED, so the
+  // database enforces it rather than the application hoping.
+  @@unique([reportId, revisionNumber])
   @@map("report_revisions")
 }
 
@@ -206,7 +211,8 @@ model ActivityLogEntry {
   tenantId     String?  // null for platform-level actions
   tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId])
   actorUserId  String
-  actorRole    String   // master_admin | tenant_admin | tenant_staff | system
+  actorRole    String   // master_admin | tenant_admin | tenant_staff | technician | system
+                        // "technician" means actorUserId is a Technician, not a PortalUser
   action       String
   targetType   String
   targetId     String

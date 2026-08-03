@@ -75,6 +75,50 @@ describe("report revisions", () => {
     expect(res.status).toBe(404);
   });
 
+  // REGRESSION. Revision numbers were computed with count-then-insert
+  // inside a transaction, which does not serialise under Postgres's
+  // default READ COMMITTED — a plain count takes no lock. Eight
+  // concurrent requests produced 1,2,2,2,2,5,6,7: four revisions
+  // labelled R2, and no R3 or R4. Now serialised by a row lock on the
+  // parent report, with a unique constraint as the backstop.
+  it("numbers concurrent revisions on one report without duplicates", async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        request(app)
+          .post(`/reports/${fx.alpha.reportId}/revisions`)
+          .set("Authorization", `Bearer ${alphaTech}`)
+          .send({ testIdsRedone: ["battery_health"] }),
+      ),
+    );
+    // A 409 is an acceptable outcome (the client retries); a duplicate
+    // number is not.
+    expect(responses.every((r) => r.status === 201 || r.status === 409)).toBe(true);
+
+    const rows = await prisma.reportRevision.findMany({
+      where: { reportId: fx.alpha.reportId },
+      orderBy: { revisionNumber: "asc" },
+    });
+    const numbers = rows.map((r) => r.revisionNumber);
+    expect(new Set(numbers).size).toBe(numbers.length);
+    // Gapless from 1 — the display convention (R1, R2, ...) depends on it.
+    expect(numbers).toEqual(Array.from({ length: numbers.length }, (_, i) => i + 1));
+  });
+
+  it("attributes the revision to a technician, not a portal role", async () => {
+    await request(app)
+      .post(`/reports/${fx.alpha.reportId}/revisions`)
+      .set("Authorization", `Bearer ${alphaTech}`)
+      .send({ testIdsRedone: ["battery_health"] });
+
+    const entry = await prisma.activityLogEntry.findFirst({
+      where: { tenantId: fx.alpha.tenantId, action: "report_revision_created" },
+    });
+    // actorUserId points into Technician, so labelling it with a portal
+    // role would send an auditor to the wrong table.
+    expect(entry?.actorRole).toBe("technician");
+    expect(entry?.actorUserId).toBe(fx.alpha.technicianId);
+  });
+
   it("rejects an empty redo list", async () => {
     const res = await request(app)
       .post(`/reports/${fx.alpha.reportId}/revisions`)

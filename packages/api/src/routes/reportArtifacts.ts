@@ -71,27 +71,53 @@ router.post("/:reportId/revisions", requireTechnicianAuth, async (req, res) => {
   });
   if (!report) return res.status(404).json({ error: "Report not found" });
 
-  // Revision numbers are per-report and must be gapless, so the count
-  // and the insert run in one transaction — two concurrent redos would
-  // otherwise both read the same count and produce duplicate R2s.
-  const revision = await prisma.$transaction(async (tx) => {
-    const existing = await tx.reportRevision.count({ where: { reportId: report.reportId } });
-    return tx.reportRevision.create({
-      data: {
-        reportId: report.reportId,
-        revisionNumber: existing + 1,
-        revisedByTechnicianId: req.technicianSession!.technicianId,
-        testIdsRedone,
-        reason: reason ?? null,
-      },
+  // Revision numbers must be unique and gapless per report — they render
+  // as DDA-0217-R1, -R2 and testSession.ts relies on them.
+  //
+  // A transaction alone does NOT achieve that. Under Postgres's default
+  // READ COMMITTED a plain count takes no lock, so concurrent redos on
+  // one report all read the same value and insert the same number. That
+  // is not hypothetical: eight concurrent requests produced
+  // 1,2,2,2,2,5,6,7 — four revisions labelled R2, and no R3 or R4.
+  //
+  // Fixed on two levels. The row lock below serialises concurrent redos
+  // for a given report, and a @@unique([reportId, revisionNumber])
+  // constraint (migration 20260803150000) makes the invariant true
+  // regardless of what any future caller does.
+  let revision;
+  try {
+    revision = await prisma.$transaction(async (tx) => {
+      // Locks the parent report row, so a second transaction for the
+      // same report blocks here until this one commits. Different
+      // reports are unaffected.
+      await tx.$queryRaw`SELECT "reportId" FROM "reports" WHERE "reportId" = ${report.reportId} FOR UPDATE`;
+
+      const existing = await tx.reportRevision.count({ where: { reportId: report.reportId } });
+      return tx.reportRevision.create({
+        data: {
+          reportId: report.reportId,
+          revisionNumber: existing + 1,
+          revisedByTechnicianId: req.technicianSession!.technicianId,
+          testIdsRedone,
+          reason: reason ?? null,
+        },
+      });
     });
-  });
+  } catch (e) {
+    // The constraint firing means a race slipped past the lock. Returning
+    // 409 lets the client retry and get the next number, rather than
+    // surfacing an opaque 500.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return res.status(409).json({ error: "A concurrent revision was recorded. Retry." });
+    }
+    throw e;
+  }
 
   await prisma.activityLogEntry.create({
     data: buildActivityLogData({
       tenantId: tenantFilter.tenantId,
       actorUserId: req.technicianSession!.technicianId,
-      actorRole: "tenant_staff",
+      actorRole: "technician",
       action: "report_revision_created",
       targetType: "report",
       targetId: `${report.reportId}-R${revision.revisionNumber}`,
@@ -176,7 +202,7 @@ router.post("/:reportId/wipe-certificate", requireTechnicianAuth, async (req, re
     data: buildActivityLogData({
       tenantId: tenantFilter.tenantId,
       actorUserId: req.technicianSession!.technicianId,
-      actorRole: "tenant_staff",
+      actorRole: "technician",
       action: "data_wipe_certified",
       targetType: "report",
       targetId: report.reportId,

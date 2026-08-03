@@ -51,7 +51,11 @@ export interface ActivityLogEntry {
   entryId: string;
   tenantId: string | null; // null for platform-level actions (tenant_created, entered_tenant_view)
   actorUserId: string;
-  actorRole: "master_admin" | "tenant_admin" | "tenant_staff" | "system";
+  // "technician" is distinct from the three PORTAL roles: actorUserId
+  // then refers to a Technician row, not a PortalUser. Collapsing a
+  // technician into "tenant_staff" would send anyone auditing the log
+  // looking for that id in the wrong table entirely.
+  actorRole: "master_admin" | "tenant_admin" | "tenant_staff" | "technician" | "system";
   action: ActivityAction;
   targetType: string; // e.g. "profile", "license", "dispute", "tenant", "report"
   targetId: string; // the ID of whatever was acted on
