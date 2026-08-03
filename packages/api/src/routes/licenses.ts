@@ -16,6 +16,7 @@
 
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
+import rateLimit from "express-rate-limit";
 import { checkLicense, License, LicenseType } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
@@ -61,6 +62,38 @@ function toSharedLicense(row: {
     activeSeats: row.activeSeats,
   };
 }
+
+// Same shape of gap as profiles.ts's by-pin lookup: mobile Step 3
+// (License Check, per CLAUDE.md "Licensing model" — checked right after
+// the profile QR scan, before device eligibility) only has a tenantId
+// at this point (from technician badge login), not a portal session or
+// a specific licenseId. Deliberately unauthenticated, rate-limited for
+// the same reason as the other mobile-facing lookups (tenantId isn't
+// secret — it's on the profile QR poster — though unlike PIN/badgeCode
+// there's no second identifier being brute-forced here, so this is
+// defense-in-depth rather than the primary mitigation).
+const tenantLicenseCheckRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Try again later." },
+});
+
+router.get("/tenants/:tenantId/check", tenantLicenseCheckRateLimit, async (req, res) => {
+  const { tenantId } = req.params;
+  // "Current" license = the most recently started active one. Schema
+  // allows historical License rows per tenant (status expired/suspended
+  // etc.), so this can't be a plain findFirst without a status filter.
+  const license = await prisma.license.findFirst({
+    where: { tenantId, status: "active" },
+    orderBy: { billingPeriodStart: "desc" },
+  });
+  if (!license) {
+    return res.json({ allowed: false, reason: "No active license found for this organization." });
+  }
+  res.json(checkLicense(toSharedLicense(license)));
+});
 
 router.get("/", requireAuth, requireTenantScope, async (req, res) => {
   const licenses = await prisma.license.findMany({
