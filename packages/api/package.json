@@ -1,7 +1,7 @@
 {
   "name": "@diagnostics/api",
   "version": "0.1.0",
-  "description": "Backend API \u2014 Sprint 1-2 deliverable per project_roadmap.docx. Express + Prisma + PostgreSQL.",
+  "description": "Backend API — Sprint 1-2 deliverable per project_roadmap.docx. Express + Prisma + PostgreSQL.",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -19,6 +19,7 @@
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "express-async-errors": "^3.1.1",
     "express-rate-limit": "^8.6.1",

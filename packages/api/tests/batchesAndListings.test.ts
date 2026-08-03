@@ -83,6 +83,23 @@ describe("batch intake", () => {
     expect(res.status).toBe(409);
   });
 
+  // REGRESSION (review finding): the status gate read outside the lock
+  // let a serial land in a batch that had already been closed. Simulated
+  // by closing the batch directly, which is what a concurrent /close
+  // commit looks like from the scan's point of view.
+  it("does not append to a batch closed after the fast-path check", async () => {
+    const batch = await startBatch();
+    await prisma.batchSession.update({
+      where: { batchId: batch.body.batchId },
+      data: { status: "closed", closedAt: new Date() },
+    });
+
+    const res = await scan(batch.body.batchId, "SER-RACE");
+    expect(res.status).toBe(409);
+    const stored = await prisma.batchSession.findUnique({ where: { batchId: batch.body.batchId } });
+    expect(stored?.deviceSerials).toEqual([]);
+  });
+
   it("cannot scan into another tenant's batch", async () => {
     const batch = await startBatch();
     const betaTech = await technicianLogin(app, fx.beta.tenantId, fx.beta.badgeCode);
@@ -156,6 +173,22 @@ describe("marketplace listings", () => {
     const res = await createListing();
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/parts_harvest/);
+  });
+
+  // REGRESSION (review finding): quotes.ts honoured the dispute hold at
+  // quote/accept/payout, but listings did not — a device could be listed
+  // for resale at the very grade the customer was contesting.
+  it("refuses to list a device with an open dispute", async () => {
+    await priceAndQuote();
+    await request(app)
+      .post("/disputes")
+      .set("Authorization", `Bearer ${alphaToken}`)
+      .send({ reportId: fx.alpha.reportId, disputingItem: "grade", customerNote: "Contested" });
+
+    const res = await createListing();
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/dispute/i);
+    expect(await prisma.marketplaceListing.count()).toBe(0);
   });
 
   it("allows one listing per report", async () => {

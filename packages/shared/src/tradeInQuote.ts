@@ -60,14 +60,22 @@ export function computeTradeInQuote(params: {
   if (!entry) return null; // no price data for this model/storage — needs manual pricing
 
   const basePrice = entry.gradeBasePrices[params.grade];
+  // A price row missing this grade would make basePrice undefined, and
+  // undefined arithmetic yields NaN — which Math.max(0, NaN) passes
+  // straight through as NaN, not 0. A NaN offer shown to a customer is
+  // worse than no offer, so treat it the same as an unpriced model: the
+  // caller already handles null as "needs manual pricing".
+  if (typeof basePrice !== "number" || !Number.isFinite(basePrice) || basePrice < 0) return null;
+
   const deductions: QuoteDeduction[] = params.results
-    .filter((r) => (r.status === "fail" || r.status === "warning") && FUNCTIONAL_DEDUCTIONS[r.testId])
+    .filter((r) => (r.status === "fail" || r.status === "warning") && r.testId in FUNCTIONAL_DEDUCTIONS)
     .map((r) => ({ reason: r.label, amount: FUNCTIONAL_DEDUCTIONS[r.testId] }));
 
-  const finalOffer = Math.max(
-    0,
-    basePrice - deductions.reduce((sum, d) => sum + d.amount, 0)
-  );
+  // Round to cents: this number is money shown to a customer, and
+  // floating-point subtraction can otherwise surface as 342.99999999999994.
+  const finalOffer = Math.round(
+    Math.max(0, basePrice - deductions.reduce((sum, d) => sum + d.amount, 0)) * 100
+  ) / 100;
 
   const quotedAt = new Date();
   const expiresAt = new Date(quotedAt.getTime() + 7 * 24 * 60 * 60 * 1000); // 7-day quote validity

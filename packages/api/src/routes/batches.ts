@@ -97,6 +97,8 @@ router.post("/:batchId/devices", requireTechnicianAuth, async (req, res) => {
     select: { batchId: true, status: true },
   });
   if (!existing) return res.status(404).json({ error: "Batch not found" });
+  // Fast path only — the authoritative status check happens inside the
+  // lock below. This just avoids acquiring a lock in the common case.
   if (existing.status !== "open") {
     return res.status(409).json({ error: "This batch is closed and cannot accept more devices" });
   }
@@ -104,21 +106,35 @@ router.post("/:batchId/devices", requireTechnicianAuth, async (req, res) => {
   const result = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "batchId" FROM "batch_sessions" WHERE "batchId" = ${existing.batchId} FOR UPDATE`;
 
+    // status is re-read INSIDE the lock, not trusted from the fast-path
+    // check above. A concurrent /close commits in a single statement, so
+    // it can land between that read and this transaction — gating on the
+    // stale value let a serial be appended to an already-closed batch,
+    // silently and with a 201. Same stale-read-gates-a-write shape as the
+    // revision-number race; the earlier fix guarded deviceSerials but not
+    // status.
     const current = await tx.batchSession.findUniqueOrThrow({
       where: { batchId: existing.batchId },
-      select: { deviceSerials: true },
+      select: { deviceSerials: true, status: true },
     });
 
+    if (current.status !== "open") {
+      return { alreadyPresent: false, closed: true, count: current.deviceSerials.length };
+    }
     if (current.deviceSerials.includes(serial)) {
-      return { batch: null, alreadyPresent: true, count: current.deviceSerials.length };
+      return { alreadyPresent: true, closed: false, count: current.deviceSerials.length };
     }
 
     const updated = await tx.batchSession.update({
       where: { batchId: existing.batchId },
       data: { deviceSerials: { push: serial } },
     });
-    return { batch: updated, alreadyPresent: false, count: updated.deviceSerials.length };
+    return { alreadyPresent: false, closed: false, count: updated.deviceSerials.length };
   });
+
+  if (result.closed) {
+    return res.status(409).json({ error: "This batch is closed and cannot accept more devices" });
+  }
 
   // 200 rather than 201 for a re-scan, so the client can tell "counted"
   // from "already counted" without treating it as an error — the

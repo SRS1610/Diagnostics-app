@@ -209,9 +209,17 @@ router.post("/", requireAuth, requireTenantScope, async (req, res) => {
     });
   }
 
-  // No tenant-uploaded prices at all means the tenant is running on the
-  // illustrative seed table, which CLAUDE.md says is not usable.
-  const priceSource = priceRows.length > 0 ? REAL_SOURCE : SEED_SOURCE;
+  // Always REAL_SOURCE here, and that is not a tautology worth deleting:
+  // a quote can only be computed from this tenant's uploaded price rows
+  // (computeTradeInQuote returned non-null, so a row matched). The
+  // SEED_SOURCE state exists for quotes minted OUTSIDE this route — the
+  // schema defaults priceSource to unverified_seed_data, so a row
+  // inserted by a script or migration cannot be accepted until someone
+  // affirms its pricing provenance. The accept-time guard is that
+  // backstop, not a check this route can trigger. (Review finding: an
+  // earlier version conditionally set SEED_SOURCE here, which was dead
+  // code implying a live check that never fired.)
+  const priceSource = REAL_SOURCE;
 
   let quote;
   try {
@@ -262,6 +270,18 @@ router.post("/:quoteId/accept", requireAuth, requireTenantScope, async (req, res
       error:
         "This quote was computed from illustrative seed pricing, not real market data, and cannot be accepted. Upload this tenant's price list first.",
     });
+  }
+
+  // The dispute hold has three checkpoints — quote, ACCEPT, payout — and
+  // this one was originally missing (caught in review): a dispute filed
+  // between quoting and acceptance would not have held the offer, even
+  // though acceptance is precisely the step that creates the obligation.
+  const openDispute = await prisma.dispute.findFirst({
+    where: { ...tenantWhere(req), reportId: quote.reportId, status: "awaiting_review" },
+    select: { disputeId: true },
+  });
+  if (openDispute) {
+    return res.status(409).json({ error: "This device has an open dispute; the offer is on hold until it is resolved" });
   }
 
   const result = await prisma.tradeInQuote.updateMany({
@@ -349,8 +369,12 @@ router.patch("/:quoteId/payout", requireAuth, requireTenantScope, async (req, re
   });
   if (!quote?.payout) return res.status(404).json({ error: "Payout not found" });
 
-  const updated = await prisma.payoutRecord.update({
-    where: { payoutId: quote.payout.payoutId },
+  // Tenant scope enforced in the WRITE, not just the read above.
+  // PayoutRecord has no tenantId column, so the filter goes through the
+  // quote relation — same house rule the profiles.ts fix established:
+  // never trust a preceding findFirst as the only boundary on a write.
+  const result = await prisma.payoutRecord.updateMany({
+    where: { payoutId: quote.payout.payoutId, quote: { ...tenantWhere(req) } },
     data: {
       status,
       ...(reference !== undefined ? { reference: String(reference) } : {}),
@@ -358,7 +382,11 @@ router.patch("/:quoteId/payout", requireAuth, requireTenantScope, async (req, re
       ...(status === "completed" ? { completedAt: new Date() } : {}),
     },
   });
+  if (result.count === 0) return res.status(404).json({ error: "Payout not found" });
 
+  const updated = await prisma.payoutRecord.findFirst({
+    where: { payoutId: quote.payout.payoutId },
+  });
   res.json(updated);
 });
 

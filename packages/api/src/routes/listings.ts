@@ -67,6 +67,18 @@ router.post("/", requireAuth, requireTenantScope, async (req, res) => {
   });
   if (!report) return res.status(404).json({ error: "Report not found" });
 
+  // CLAUDE.md's dispute hold applies here too, and was missing (caught in
+  // review): listing a device for resale at a grade the customer is
+  // actively contesting is exactly what the hold exists to prevent.
+  // quotes.ts already enforces this at quote, accept and payout.
+  const openDispute = await prisma.dispute.findFirst({
+    where: { ...tenantFilter, reportId: report.reportId, status: "awaiting_review" },
+    select: { disputeId: true },
+  });
+  if (openDispute) {
+    return res.status(409).json({ error: "This device has an open dispute and cannot be listed until it is resolved" });
+  }
+
   if (!report.quote) {
     return res.status(422).json({ error: "This report has no trade-in quote, so no listing price can be derived" });
   }

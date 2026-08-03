@@ -210,6 +210,26 @@ describe("acceptance guards", () => {
     expect(res.body.error).toMatch(/expired/i);
   });
 
+  // REGRESSION (review finding): this was the missing third checkpoint.
+  // The hold existed at quote time and payout time but not at accept —
+  // and accept is precisely the step that creates the obligation.
+  it("refuses to accept while a dispute is open", async () => {
+    await uploadPrices();
+    const created = await createQuote();
+    await request(app)
+      .post("/disputes")
+      .set("Authorization", `Bearer ${alphaToken}`)
+      .send({ reportId: fx.alpha.reportId, disputingItem: "grade", customerNote: "Contested" });
+
+    const res = await request(app)
+      .post(`/quotes/${created.body.quoteId}/accept`)
+      .set("Authorization", `Bearer ${alphaToken}`);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/dispute/i);
+    const stored = await prisma.tradeInQuote.findUnique({ where: { quoteId: created.body.quoteId } });
+    expect(stored?.accepted).toBe(false);
+  });
+
   it("refuses to accept twice", async () => {
     await uploadPrices();
     const created = await createQuote();
@@ -280,6 +300,27 @@ describe("payout", () => {
       .set("Authorization", `Bearer ${alphaToken}`)
       .send({ status: "failed" });
     expect(res.status).toBe(400);
+  });
+
+  // A payout PATCH must not update a payout across the tenant boundary
+  // even when the write is keyed by payoutId — the tenant filter rides
+  // through the quote relation inside the write itself.
+  it("scopes the payout status write to the caller's tenant", async () => {
+    const quoteId = await acceptedQuote();
+    await request(app)
+      .post(`/quotes/${quoteId}/payout`)
+      .set("Authorization", `Bearer ${alphaToken}`)
+      .send({ method: "ach" });
+
+    const betaToken = await portalLogin(app, fx.beta.adminEmail);
+    const res = await request(app)
+      .patch(`/quotes/${quoteId}/payout`)
+      .set("Authorization", `Bearer ${betaToken}`)
+      .send({ status: "completed" });
+    expect(res.status).toBe(404);
+
+    const payout = await prisma.payoutRecord.findFirst({ where: { quoteId } });
+    expect(payout?.status).toBe("pending");
   });
 
   it("does not expose another tenant's quotes", async () => {
