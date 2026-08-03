@@ -13,6 +13,7 @@ import { ConfirmScreen } from '../screens/ConfirmScreen';
 import { ChecklistScreen } from '../screens/ChecklistScreen';
 import { RunTestScreen } from '../screens/RunTestScreen';
 import { ResultsScreen } from '../screens/ResultsScreen';
+import { CompleteScreen } from '../screens/CompleteScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -26,6 +27,7 @@ const BUILT_SCREENS: Partial<Record<keyof RootStackParamList, React.ComponentTyp
   Checklist: ChecklistScreen,
   RunTest: RunTestScreen,
   Results: ResultsScreen,
+  Complete: CompleteScreen,
 };
 
 export function AppNavigator() {

@@ -27,6 +27,10 @@ interface SessionContextValue extends SessionState {
   setLicenseCheck: (result: LicenseCheckResult) => void;
   setDevice: (device: Partial<CapturedIdentity>) => void;
   setResults: (results: DiagnosticResultInput[]) => void;
+  /** Clears per-device state before the next inspection, so nothing
+   *  from one device can leak into another's report. The technician
+   *  stays logged in — that's shift-level, not per-device. */
+  reset: () => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -37,6 +41,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [licenseCheck, setLicenseCheck] = useState<LicenseCheckResult | null>(null);
   const [device, setDevice] = useState<Partial<CapturedIdentity> | null>(null);
   const [results, setResults] = useState<DiagnosticResultInput[]>([]);
+
+  const reset = React.useCallback(() => {
+    setProfile(null);
+    setDevice(null);
+    setResults([]);
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -50,8 +60,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setLicenseCheck,
       setDevice,
       setResults,
+      reset,
     }),
-    [technician, profile, licenseCheck, device, results],
+    [technician, profile, licenseCheck, device, results, reset],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
