@@ -23,13 +23,51 @@ const prisma = new PrismaClient();
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
+// ActivityAction is a TS union with no runtime array of its own — mirror
+// its literal values here so an unrecognized ?actions= value gets a
+// clear 400 instead of silently reaching Prisma as an always-empty (or
+// erroring) filter.
+const VALID_ACTIONS = new Set<ActivityAction>([
+  "portal_login",
+  "portal_logout",
+  "entered_tenant_view",
+  "exited_tenant_view",
+  "tenant_created",
+  "tenant_suspended",
+  "tenant_activated",
+  "profile_created",
+  "profile_updated",
+  "profile_deleted",
+  "license_provisioned",
+  "license_suspended",
+  "license_expired",
+  "seat_consumed",
+  "seat_released",
+  "dispute_received",
+  "dispute_upheld",
+  "dispute_grade_adjusted",
+  "pricing_uploaded",
+  "settings_updated",
+  "report_revision_created",
+  "data_wipe_certified",
+  "warranty_claim_filed",
+  "warranty_claim_resolved",
+  "notification_sent",
+  "notification_failed",
+]);
+
 router.get("/", requireAuth, requireTenantScope, async (req, res) => {
   const { actions, actorUserId, fromDate, toDate, limit } = req.query;
 
   const where: Prisma.ActivityLogEntryWhereInput = { ...tenantWhere(req) };
 
   if (typeof actions === "string" && actions.length > 0) {
-    where.action = { in: actions.split(",") as ActivityAction[] };
+    const requestedActions = actions.split(",");
+    const unknown = requestedActions.filter((a) => !VALID_ACTIONS.has(a as ActivityAction));
+    if (unknown.length > 0) {
+      return res.status(400).json({ error: `Unknown action(s): ${unknown.join(", ")}` });
+    }
+    where.action = { in: requestedActions as ActivityAction[] };
   }
   if (typeof actorUserId === "string" && actorUserId.length > 0) {
     where.actorUserId = actorUserId;
