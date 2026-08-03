@@ -36,6 +36,7 @@ import reportArtifactsRoutes from "./routes/reportArtifacts";
 import disputesRoutes from "./routes/disputes";
 import warrantyClaimsRoutes from "./routes/warrantyClaims";
 import invoicesRoutes from "./routes/invoices";
+import quotesRoutes from "./routes/quotes";
 
 export function createApp() {
   const app = express();
@@ -60,6 +61,7 @@ export function createApp() {
   app.use("/disputes", disputesRoutes);
   app.use("/warranty-claims", warrantyClaimsRoutes);
   app.use("/invoices", invoicesRoutes);
+  app.use("/quotes", quotesRoutes);
 
   // Catch-all error handler. Must be registered AFTER all routes, and must
   // take four arguments — that arity is how Express identifies it.

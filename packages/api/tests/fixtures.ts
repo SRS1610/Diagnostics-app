@@ -38,6 +38,11 @@ export interface Fixtures {
  */
 export async function resetDatabase(): Promise<void> {
   await prisma.activityLogEntry.deleteMany();
+  await prisma.payoutRecord.deleteMany();
+  await prisma.tradeInQuote.deleteMany();
+  await prisma.marketplaceListing.deleteMany();
+  await prisma.marketPriceEntry.deleteMany();
+  await prisma.batchSession.deleteMany();
   await prisma.reportRevision.deleteMany();
   await prisma.dataWipeCertificate.deleteMany();
   await prisma.warrantyClaim.deleteMany();

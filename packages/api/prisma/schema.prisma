@@ -20,11 +20,11 @@ datasource db {
 // Tenant — the top-level entity (tenant.ts)
 // ============================================================
 model Tenant {
-  tenantId           String   @id @default(cuid())
-  companyName        String
-  status             String   @default("trial") // active | suspended | trial
+  tenantId            String   @id @default(cuid())
+  companyName         String
+  status              String   @default("trial") // active | suspended | trial
   primaryContactEmail String
-  createdAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
 
   profiles     CustomerProfile[]
   licenses     License[]
@@ -32,6 +32,9 @@ model Tenant {
   technicians  Technician[]
   reports      Report[]
   activityLog  ActivityLogEntry[]
+  marketPrices MarketPriceEntry[]
+  quotes       TradeInQuote[]
+  batches      BatchSession[]
 
   @@map("tenants")
 }
@@ -45,7 +48,7 @@ model CustomerProfile {
   tenantId       String
   tenant         Tenant   @relation(fields: [tenantId], references: [tenantId])
   customerName   String
-  pin            String   // unique WITHIN tenant, not globally — see @@unique below
+  pin            String // unique WITHIN tenant, not globally — see @@unique below
   enabledTestIds String[] // Postgres text array
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -60,18 +63,18 @@ model CustomerProfile {
 // License — bills at the TENANT level (licensing.ts)
 // ============================================================
 model License {
-  licenseId               String   @id @default(cuid())
-  tenantId                String
-  tenant                  Tenant   @relation(fields: [tenantId], references: [tenantId])
-  type                    String   // per_inspection | seat_subscription | tiered_subscription | enterprise_unlimited
-  status                  String   @default("active") // active | expired | suspended | quota_exceeded
-  billingPeriodStart      DateTime
-  billingPeriodEnd        DateTime
-  includedQuota           Int?
-  usageThisPeriod         Int      @default(0)
+  licenseId                String   @id @default(cuid())
+  tenantId                 String
+  tenant                   Tenant   @relation(fields: [tenantId], references: [tenantId])
+  type                     String // per_inspection | seat_subscription | tiered_subscription | enterprise_unlimited
+  status                   String   @default("active") // active | expired | suspended | quota_exceeded
+  billingPeriodStart       DateTime
+  billingPeriodEnd         DateTime
+  includedQuota            Int?
+  usageThisPeriod          Int      @default(0)
   overageRatePerInspection Float?
-  seatLimit               Int?
-  activeSeats             Int      @default(0)
+  seatLimit                Int?
+  activeSeats              Int      @default(0)
 
   invoices Invoice[]
 
@@ -84,7 +87,7 @@ model Invoice {
   license            License  @relation(fields: [licenseId], references: [licenseId])
   billingPeriodStart DateTime
   billingPeriodEnd   DateTime
-  lineItems          Json     // InvoiceLineItem[] from invoicing.ts
+  lineItems          Json // InvoiceLineItem[] from invoicing.ts
   subtotal           Float
   total              Float
   status             String   @default("draft") // draft | sent | paid | overdue | void
@@ -101,8 +104,8 @@ model PortalUser {
   userId       String   @id @default(cuid())
   email        String   @unique
   passwordHash String
-  role         String   // master_admin | tenant_admin | tenant_staff
-  tenantId     String?  // null ONLY for master_admin
+  role         String // master_admin | tenant_admin | tenant_staff
+  tenantId     String? // null ONLY for master_admin
   tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId])
   createdAt    DateTime @default(now())
 
@@ -131,41 +134,43 @@ model Technician {
 // Report (types.ts AuditReport) + revisions (testSession.ts)
 // ============================================================
 model Report {
-  reportId       String   @id @default(cuid())
-  tenantId       String
-  tenant         Tenant   @relation(fields: [tenantId], references: [tenantId])
-  profileId      String?
-  profile        CustomerProfile? @relation(fields: [profileId], references: [profileId])
-  technicianId   String?
-  technician     Technician? @relation(fields: [technicianId], references: [technicianId])
-  generatedAt    DateTime @default(now())
-  deviceMake     String
-  deviceModel    String
-  serialNumber   String
-  imei           String
-  imei2          String?
-  captureSource  String   // barcode | ocr | manual
-  results        Json     // DiagnosticResult[]
-  overallStatus  String   // pass | fail | pass_with_warnings
-  routing        String?  // resale | repair | parts_harvest | recycle | hold_ineligible
+  reportId      String           @id @default(cuid())
+  tenantId      String
+  tenant        Tenant           @relation(fields: [tenantId], references: [tenantId])
+  profileId     String?
+  profile       CustomerProfile? @relation(fields: [profileId], references: [profileId])
+  technicianId  String?
+  technician    Technician?      @relation(fields: [technicianId], references: [technicianId])
+  generatedAt   DateTime         @default(now())
+  deviceMake    String
+  deviceModel   String
+  serialNumber  String
+  imei          String
+  imei2         String?
+  captureSource String // barcode | ocr | manual
+  results       Json // DiagnosticResult[]
+  overallStatus String // pass | fail | pass_with_warnings
+  routing       String? // resale | repair | parts_harvest | recycle | hold_ineligible
 
-  revisions           ReportRevision[]
-  wipeCertificate     DataWipeCertificate?
-  warrantyClaims      WarrantyClaim[]
+  revisions       ReportRevision[]
+  wipeCertificate DataWipeCertificate?
+  warrantyClaims  WarrantyClaim[]
+  quote           TradeInQuote?
+  listing         MarketplaceListing?
 
   @@index([tenantId, serialNumber]) // Devices tab groups by serial, within tenant
   @@map("reports")
 }
 
 model ReportRevision {
-  id                     String   @id @default(cuid())
-  reportId               String
-  report                 Report   @relation(fields: [reportId], references: [reportId])
-  revisionNumber         Int
-  revisedAt              DateTime @default(now())
-  revisedByTechnicianId  String
-  testIdsRedone          String[]
-  reason                 String?
+  id                    String   @id @default(cuid())
+  reportId              String
+  report                Report   @relation(fields: [reportId], references: [reportId])
+  revisionNumber        Int
+  revisedAt             DateTime @default(now())
+  revisedByTechnicianId String
+  testIdsRedone         String[]
+  reason                String?
 
   // Revision numbers must be unique and gapless per report — they are
   // rendered as DDA-0217-R1, -R2 and referenced by testSession.ts. A
@@ -177,28 +182,28 @@ model ReportRevision {
 
 model DataWipeCertificate {
   certificateId          String   @id @default(cuid())
-  reportId                String   @unique
-  report                  Report   @relation(fields: [reportId], references: [reportId])
-  deviceSerial            String
-  imei                    String
-  standard                String   // nist_800_88_clear | nist_800_88_purge
-  wipedAt                 DateTime @default(now())
-  verifiedByTechnicianId  String
-  passed                  Boolean
+  reportId               String   @unique
+  report                 Report   @relation(fields: [reportId], references: [reportId])
+  deviceSerial           String
+  imei                   String
+  standard               String // nist_800_88_clear | nist_800_88_purge
+  wipedAt                DateTime @default(now())
+  verifiedByTechnicianId String
+  passed                 Boolean
 
   @@map("data_wipe_certificates")
 }
 
 model WarrantyClaim {
-  claimId          String   @id @default(cuid())
-  reportId         String
-  report           Report   @relation(fields: [reportId], references: [reportId])
-  deviceSerial     String
-  claimedIssue     String
-  submittedAt      DateTime @default(now())
+  claimId           String   @id @default(cuid())
+  reportId          String
+  report            Report   @relation(fields: [reportId], references: [reportId])
+  deviceSerial      String
+  claimedIssue      String
+  submittedAt       DateTime @default(now())
   warrantyExpiresAt DateTime
-  status           String   @default("open") // open | investigating | approved | denied | resolved
-  resolutionNotes  String?
+  status            String   @default("open") // open | investigating | approved | denied | resolved
+  resolutionNotes   String?
 
   @@map("warranty_claims")
 }
@@ -207,19 +212,19 @@ model WarrantyClaim {
 // Admin Activity Log (adminActivityLog.ts) — central audit trail
 // ============================================================
 model ActivityLogEntry {
-  entryId      String   @id @default(cuid())
-  tenantId     String?  // null for platform-level actions
-  tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId])
-  actorUserId  String
-  actorRole    String   // master_admin | tenant_admin | tenant_staff | technician | system
-                        // "technician" means actorUserId is a Technician, not a PortalUser
-  action       String
-  targetType   String
-  targetId     String
-  details      String?
-  metadata     Json?
-  timestamp    DateTime @default(now())
-  ipAddress    String?
+  entryId     String   @id @default(cuid())
+  tenantId    String? // null for platform-level actions
+  tenant      Tenant?  @relation(fields: [tenantId], references: [tenantId])
+  actorUserId String
+  actorRole   String // master_admin | tenant_admin | tenant_staff | technician | system
+  // "technician" means actorUserId is a Technician, not a PortalUser
+  action      String
+  targetType  String
+  targetId    String
+  details     String?
+  metadata    Json?
+  timestamp   DateTime @default(now())
+  ipAddress   String?
 
   @@index([tenantId, timestamp])
   @@map("activity_log")
@@ -230,16 +235,123 @@ model ActivityLogEntry {
 // TypeScript module; flagged in CLAUDE.md as a real gap)
 // ============================================================
 model Dispute {
-  disputeId       String   @id @default(cuid())
-  tenantId        String
-  reportId        String
-  disputingItem   String   // which test/grade is disputed
-  customerNote    String
-  status          String   @default("awaiting_review") // awaiting_review | resolved_upheld | resolved_adjusted
+  disputeId        String    @id @default(cuid())
+  tenantId         String
+  reportId         String
+  disputingItem    String // which test/grade is disputed
+  customerNote     String
+  status           String    @default("awaiting_review") // awaiting_review | resolved_upheld | resolved_adjusted
   resolvedByUserId String?
-  resolutionNotes String?
-  submittedAt     DateTime @default(now())
-  resolvedAt      DateTime?
+  resolutionNotes  String?
+  submittedAt      DateTime  @default(now())
+  resolvedAt       DateTime?
 
   @@map("disputes")
+}
+
+// ============================================================
+// Trade-in valuation (tradeInQuote.ts)
+// ============================================================
+
+// Per-tenant, because each customer maintains their own pricing —
+// CLAUDE.md's Excel upload exists so admins can keep prices current
+// without a code change. NOTE: the seed data shipped in
+// marketPriceData.ts is explicitly rough/illustrative; a quote computed
+// from it is not a real offer. See marketPriceSource on TradeInQuote.
+model MarketPriceEntry {
+  priceId         String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [tenantId])
+  model           String
+  storageGb       Int
+  // CosmeticGrade -> base price in USD, before deductions.
+  gradeBasePrices Json
+  currency        String   @default("USD")
+  updatedAt       DateTime @updatedAt
+
+  // One price row per model+storage per tenant, so a quote lookup can
+  // never be ambiguous the way the licence lookup once was.
+  @@unique([tenantId, model, storageGb])
+  @@map("market_prices")
+}
+
+model TradeInQuote {
+  quoteId     String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [tenantId])
+  reportId    String    @unique
+  report      Report    @relation(fields: [reportId], references: [reportId])
+  deviceModel String
+  grade       String
+  basePrice   Float
+  deductions  Json
+  finalOffer  Float
+  currency    String    @default("USD")
+  quotedAt    DateTime  @default(now())
+  // CLAUDE.md: "Quotes expire (7-day default) — prices move; don't let a
+  // quote sit open-ended."
+  expiresAt   DateTime
+  // Whether the price table behind this quote was real data or the
+  // illustrative seed. Recorded per quote because it determines whether
+  // the number can be shown to a customer at all.
+  priceSource String    @default("unverified_seed_data")
+  accepted    Boolean   @default(false)
+  acceptedAt  DateTime?
+
+  payout PayoutRecord?
+
+  @@map("trade_in_quotes")
+}
+
+// CLAUDE.md: payout is "a separate lifecycle from the quote itself — a
+// quote can be accepted without payout being complete yet."
+model PayoutRecord {
+  payoutId      String       @id @default(cuid())
+  quoteId       String       @unique
+  quote         TradeInQuote @relation(fields: [quoteId], references: [quoteId])
+  method        String // store_credit | ach | paypal | gift_card
+  status        String       @default("pending") // pending | processing | completed | failed
+  amount        Float
+  initiatedAt   DateTime     @default(now())
+  completedAt   DateTime?
+  reference     String?
+  failureReason String?
+
+  @@map("payout_records")
+}
+
+// ============================================================
+// Marketplace listing (marketplaceListing.ts)
+// ============================================================
+model MarketplaceListing {
+  listingId   String   @id @default(cuid())
+  reportId    String   @unique
+  report      Report   @relation(fields: [reportId], references: [reportId])
+  title       String
+  description String
+  askingPrice Float
+  currency    String   @default("USD")
+  createdAt   DateTime @default(now())
+
+  @@map("marketplace_listings")
+}
+
+// ============================================================
+// Bulk batch intake (batchSession.ts)
+// ============================================================
+model BatchSession {
+  batchId       String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [tenantId])
+  sourceName    String
+  profileId     String?
+  technicianId  String?
+  // Serials scanned into this lot. CLAUDE.md: re-scanning the same
+  // serial is a no-op, not a duplicate entry.
+  deviceSerials String[]
+  status        String    @default("open") // open | closed
+  createdAt     DateTime  @default(now())
+  closedAt      DateTime?
+
+  @@map("batch_sessions")
 }
