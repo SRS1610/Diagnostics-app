@@ -28,11 +28,26 @@
 
 import { Router } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
+import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// badgeCode is a low-entropy, non-secret identifier (CLAUDE.md: "about
+// attribution... not security") looked up by a client-supplied tenantId
+// that isn't secret either — it's printed on the profile QR poster at
+// intake. Without a rate limit, an unauthenticated caller who has (or
+// photographs) a tenantId could brute-force badgeCode and harvest a
+// tenant's technician roster with no throttling.
+const badgeLoginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Try again later." },
+});
 
 router.get("/", requireAuth, requireTenantScope, async (req, res) => {
   const technicians = await prisma.technician.findMany({
@@ -116,8 +131,8 @@ router.delete("/:technicianId", requireAuth, requireTenantScope, async (req, res
 // Mobile app badge login — not requireAuth/requireTenantScope (there is
 // no portal session yet; this IS how a mobile session establishes a
 // technician identity). See file header for the tenantId disambiguation
-// note.
-router.post("/login", async (req, res) => {
+// note, and badgeLoginRateLimit above for the enumeration-risk mitigation.
+router.post("/login", badgeLoginRateLimit, async (req, res) => {
   const { tenantId, badgeCode } = req.body;
   if (!tenantId || !badgeCode) {
     return res.status(400).json({ error: "tenantId and badgeCode are required" });
@@ -128,7 +143,14 @@ router.post("/login", async (req, res) => {
   });
   if (!technician) return res.status(404).json({ error: "Badge code not recognized for this tenant" });
 
-  res.json(technician);
+  // Trim the response to what a mobile session actually needs — no
+  // reason to echo badgeCode back once it's served its purpose as a
+  // lookup key.
+  res.json({
+    technicianId: technician.technicianId,
+    tenantId: technician.tenantId,
+    displayName: technician.displayName,
+  });
 });
 
 export default router;
