@@ -14,7 +14,7 @@
 // read-only mobile lookups didn't.
 
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { computeOverallStatus, DiagnosticResult } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
@@ -26,6 +26,11 @@ const prisma = new PrismaClient();
 const CAPTURE_SOURCES = new Set(["barcode", "ocr", "manual"]);
 const RESULT_STATUSES = new Set(["pass", "fail", "warning", "skipped"]);
 const RESULT_SOURCES = new Set(["api", "manual", "ocr"]);
+// Mirrors RoutingDecision in deviceRouting.ts. Validated like every
+// other enum on this route rather than accepting any string — a stored
+// routing value the portal doesn't recognize would render as a blank or
+// broken badge on the report and the Devices tab.
+const ROUTING_DECISIONS = new Set(["resale", "repair", "parts_harvest", "recycle", "hold_ineligible"]);
 
 /**
  * CLAUDE.md: "IMEI is always 15 digits — validate format after capture."
@@ -73,9 +78,38 @@ function validateResults(results: unknown): { ok: true; value: DiagnosticResult[
     if (duplicate !== -1) {
       return { ok: false, error: `results contains duplicate testId "${entry.testId}"` };
     }
+    if (
+      entry.value !== undefined &&
+      entry.value !== null &&
+      typeof entry.value !== "string" &&
+      typeof entry.value !== "number"
+    ) {
+      return { ok: false, error: `results[${i}].value must be a string or number when provided` };
+    }
+    if (entry.notes !== undefined && entry.notes !== null && typeof entry.notes !== "string") {
+      return { ok: false, error: `results[${i}].notes must be a string when provided` };
+    }
   }
 
-  return { ok: true, value: results as DiagnosticResult[] };
+  // Reconstruct each entry from whitelisted keys rather than storing the
+  // caller's objects verbatim. This column is the audit record and feeds
+  // reportRenderer.ts, which assumes the DiagnosticResult shape — passing
+  // parsed input straight through would let arbitrary extra keys, or a
+  // deeply nested `value`, ride into the stored report and out into a
+  // generated PDF.
+  const sanitized: DiagnosticResult[] = (results as Record<string, unknown>[]).map((entry) => ({
+    testId: entry.testId as string,
+    label: entry.label as string,
+    status: entry.status as DiagnosticResult["status"],
+    source: entry.source as DiagnosticResult["source"],
+    timestamp: entry.timestamp as string,
+    ...(entry.value !== undefined && entry.value !== null
+      ? { value: entry.value as string | number }
+      : {}),
+    ...(entry.notes !== undefined && entry.notes !== null ? { notes: entry.notes as string } : {}),
+  }));
+
+  return { ok: true, value: sanitized };
 }
 
 // ============================================================
@@ -131,8 +165,12 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
   const validated = validateResults(results);
   if (!validated.ok) return res.status(400).json({ error: validated.error });
 
-  if (routing !== undefined && routing !== null && typeof routing !== "string") {
-    return res.status(400).json({ error: "routing must be a string when provided" });
+  if (routing !== undefined && routing !== null) {
+    if (typeof routing !== "string" || !ROUTING_DECISIONS.has(routing)) {
+      return res.status(400).json({
+        error: `routing must be one of: ${[...ROUTING_DECISIONS].join(", ")}`,
+      });
+    }
   }
 
   const tenantFilter = technicianTenantWhere(req);
@@ -150,22 +188,39 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
     if (!profile) return res.status(404).json({ error: "Profile not found" });
   }
 
-  const report = await prisma.report.create({
-    data: {
-      ...tenantFilter, // from the token, never the body
-      profileId: (profileId as string | undefined) ?? null,
-      technicianId: req.technicianSession!.technicianId,
-      deviceMake: make,
-      deviceModel: model,
-      serialNumber,
-      imei,
-      imei2: (imei2 as string | undefined) ?? null,
-      captureSource,
-      results: validated.value as unknown as object[],
-      overallStatus: computeOverallStatus(validated.value),
-      routing: (routing as string | undefined) ?? null,
-    },
-  });
+  let report;
+  try {
+    report = await prisma.report.create({
+      data: {
+        ...tenantFilter, // from the token, never the body
+        profileId: (profileId as string | undefined) ?? null,
+        technicianId: req.technicianSession!.technicianId,
+        deviceMake: make,
+        deviceModel: model,
+        serialNumber,
+        imei,
+        imei2: (imei2 as string | undefined) ?? null,
+        captureSource,
+        results: validated.value as unknown as object[],
+        overallStatus: computeOverallStatus(validated.value),
+        routing: (routing as string | undefined) ?? null,
+      },
+    });
+  } catch (e) {
+    // P2003 = foreign key violation. Reachable without any adversary:
+    // a technician session token stays cryptographically valid for its
+    // full TTL, so an admin removing that technician from the roster
+    // (or deleting the profile) between login and submission lands here.
+    // Treated as a revoked session rather than a server fault — the
+    // token references a row that no longer exists, and the technician
+    // needs to re-authenticate.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return res.status(401).json({
+        error: "Session is no longer valid — the technician or profile no longer exists. Log in again.",
+      });
+    }
+    throw e;
+  }
 
   // licensing.ts: "Call once per COMPLETED session (report generated),
   // not per test — a session that's abandoned partway through shouldn't
@@ -179,14 +234,24 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
   // would lose inspection work over a billing bookkeeping miss. The
   // licence gate that actually blocks unlicensed work runs at session
   // start (mobile Step 3).
-  await prisma.license.updateMany({
-    where: {
-      ...tenantFilter,
-      status: "active",
-      type: { in: ["per_inspection", "tiered_subscription"] },
-    },
-    data: { usageThisPeriod: { increment: 1 } },
-  });
+  //
+  // Wrapped separately from the create above: the report is already
+  // durably persisted at this point, so a failure here must not stop the
+  // technician getting their 201. Losing completed inspection work to a
+  // billing-bookkeeping error is strictly the worse outcome; an
+  // under-counted credit is recoverable from the report rows themselves.
+  try {
+    await prisma.license.updateMany({
+      where: {
+        ...tenantFilter,
+        status: "active",
+        type: { in: ["per_inspection", "tiered_subscription"] },
+      },
+      data: { usageThisPeriod: { increment: 1 } },
+    });
+  } catch (e) {
+    console.error(`License usage increment failed for report ${report.reportId}:`, e);
+  }
 
   res.status(201).json(report);
 });
