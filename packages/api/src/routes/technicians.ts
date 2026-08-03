@@ -32,6 +32,7 @@ import rateLimit from "express-rate-limit";
 import { generateTechnicianBadgePayload } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
+import { issueTechnicianToken } from "../middleware/technicianAuth";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -167,7 +168,16 @@ router.post("/login", badgeLoginRateLimit, async (req, res) => {
   // so a mis-provisioned device is visible rather than silent. Not a
   // cross-tenant disclosure — the caller already proved knowledge of a
   // valid (tenantId, badgeCode) pair for exactly this tenant.
+  //
+  // The token is what lets this session WRITE (report creation). Every
+  // write route reads tenantId off the token, never off the request
+  // body — see middleware/technicianAuth.ts for why that distinction
+  // matters here but didn't for the read-only mobile lookups.
   res.json({
+    token: issueTechnicianToken({
+      technicianId: technician.technicianId,
+      tenantId: technician.tenantId,
+    }),
     technicianId: technician.technicianId,
     tenantId: technician.tenantId,
     displayName: technician.displayName,
