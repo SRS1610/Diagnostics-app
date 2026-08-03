@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 
 import authRoutes from "./routes/auth";
 import reportsRoutes from "./routes/reports";
+import tenantsRoutes from "./routes/tenants";
 
 dotenv.config();
 
@@ -20,8 +21,9 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/auth", authRoutes);
 app.use("/reports", reportsRoutes);
+app.use("/tenants", tenantsRoutes);
 
-// TODO (Sprint 2): tenants, profiles, licenses, technicians, disputes,
+// TODO (Sprint 2): profiles, licenses, technicians, disputes,
 // activity-log routes — follow the pattern in routes/reports.ts for
 // every tenant-scoped resource.
 
