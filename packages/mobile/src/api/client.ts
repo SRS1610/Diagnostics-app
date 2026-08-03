@@ -12,6 +12,7 @@ export interface Technician {
   technicianId: string;
   tenantId: string;
   displayName: string;
+  companyName: string;
 }
 
 export interface CustomerProfile {

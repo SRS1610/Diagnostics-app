@@ -1,20 +1,21 @@
 // src/screens/TechnicianLoginScreen.tsx
 //
 // Mobile Step 1 — "Start your shift" (ui_journey_premium.html). Badge QR
-// scan is the primary path (see CLAUDE.md "Profile QR scanning" for the
-// scan-first pattern this mirrors); manual tenantId + badge code entry
-// is the fallback for a missing/damaged badge.
+// scan is the primary path (mirroring the scan-first pattern CLAUDE.md
+// established for profile QRs); manual badge-code entry is the fallback
+// for a damaged/missing badge.
 //
-// Manual entry currently asks for a raw tenantId, not a friendly
-// company picker/search — CLAUDE.md flags this exact gap ("manual PIN
-// entry... needs a tenant picker step first, since typed digits alone
-// are ambiguous across tenants") without resolving it, and there's no
-// tenant-search API endpoint yet (tenant listing is master_admin-only —
-// see routes/tenants.ts). Flagging here rather than silently guessing a
-// full tenant-picker UI; a real fix needs either a public tenant-lookup
-// endpoint (by company name/slug) or a QR-only policy for this fallback.
+// The manual fallback never asks for a tenantId. The device is bound to
+// one tenant on its first successful badge scan and remembers it — see
+// src/lib/deviceTenant.ts for why that's the right model for a
+// facility-controlled shared tablet, and what the rejected alternatives
+// were. Consequence: manual entry is only available once the device has
+// been bound, so the very first login on a fresh tablet must use the
+// badge QR. That's a deliberate trade — it's the documented primary
+// path anyway, and it beats either exposing a public tenant directory or
+// asking a technician to type a cuid.
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
@@ -22,39 +23,77 @@ import { QrScannerView } from '../components/QrScannerView';
 import { parseTechnicianBadgePayload } from '../lib/qrPayloads';
 import { ApiError, loginTechnician } from '../api/client';
 import { useSession } from '../context/SessionContext';
+import { clearDeviceTenant, loadDeviceTenant, saveDeviceTenant } from '../lib/deviceTenant';
+import type { DeviceTenantBinding } from '../lib/deviceTenant';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TechnicianLogin'>;
 
 export function TechnicianLoginScreen({ navigation }: Props) {
   const { setTechnician } = useSession();
   const [mode, setMode] = useState<'scan' | 'manual'>('scan');
-  const [manualTenantId, setManualTenantId] = useState('');
+  const [binding, setBinding] = useState<DeviceTenantBinding | null>(null);
+  const [bindingLoaded, setBindingLoaded] = useState(false);
   const [manualBadgeCode, setManualBadgeCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const attemptLogin = async (tenantId: string, badgeCode: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const technician = await loginTechnician(tenantId, badgeCode);
-      setTechnician(technician);
-      navigation.replace('ScanProfile');
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Login failed — check your connection and try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    void loadDeviceTenant().then((loaded) => {
+      setBinding(loaded);
+      setBindingLoaded(true);
+    });
+  }, []);
 
-  const handleScanned = (value: string) => {
-    const parsed = parseTechnicianBadgePayload(value);
-    if (!parsed) {
-      setError('That QR code isn’t a technician badge. Try again or enter your code manually.');
-      return;
-    }
-    void attemptLogin(parsed.tenantId, parsed.badgeCode);
-  };
+  const attemptLogin = useCallback(
+    async (tenantId: string, badgeCode: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const technician = await loginTechnician(tenantId, badgeCode);
+        // Bind (or refresh) the device's tenant on every success, so a
+        // company rename propagates and a re-scan after clearing the
+        // binding re-establishes it.
+        await saveDeviceTenant(technician.tenantId, technician.companyName);
+        setTechnician(technician);
+        navigation.replace('ScanProfile');
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'Login failed — check your connection and try again.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [navigation, setTechnician],
+  );
+
+  const handleScanned = useCallback(
+    (value: string) => {
+      const parsed = parseTechnicianBadgePayload(value);
+      if (!parsed) {
+        setError('That QR code isn’t a technician badge. Try again, or use your badge code.');
+        return;
+      }
+      if (binding && parsed.tenantId !== binding.tenantId) {
+        // A badge from a different organization than this tablet is set
+        // up for is far more likely a mistake (wrong tablet, wrong
+        // station) than an intentional re-provisioning, so surface it
+        // instead of silently switching the device's tenant.
+        setError(
+          `That badge belongs to a different organization. This device is set up for ${binding.companyName}.`,
+        );
+        return;
+      }
+      void attemptLogin(parsed.tenantId, parsed.badgeCode);
+    },
+    [attemptLogin, binding],
+  );
+
+  const handleSwitchOrganization = useCallback(() => {
+    void clearDeviceTenant().then(() => {
+      setBinding(null);
+      setMode('scan');
+      setError(null);
+    });
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -62,6 +101,15 @@ export function TechnicianLoginScreen({ navigation }: Props) {
       <Text style={styles.subtitle}>
         Scan your badge or enter your code — this attributes your work for QA and dispute records.
       </Text>
+
+      {binding && (
+        <View style={styles.bindingBanner}>
+          <Text style={styles.bindingText}>This device is set up for {binding.companyName}.</Text>
+          <TouchableOpacity onPress={handleSwitchOrganization}>
+            <Text style={styles.bindingLink}>Change</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {mode === 'scan' ? (
         <>
@@ -75,39 +123,52 @@ export function TechnicianLoginScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
           )}
-          <TouchableOpacity style={styles.linkButton} onPress={() => setMode('manual')}>
-            <Text style={styles.linkText}>Can&apos;t scan? Enter code manually</Text>
-          </TouchableOpacity>
+          {bindingLoaded &&
+            (binding ? (
+              <TouchableOpacity
+                style={styles.linkButton}
+                onPress={() => {
+                  setError(null);
+                  setMode('manual');
+                }}
+              >
+                <Text style={styles.linkText}>Can&apos;t scan? Enter badge code</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.hint}>
+                First login on this device must use the badge QR code — it identifies your organization.
+              </Text>
+            ))}
         </>
       ) : (
         <>
-          <TextInput
-            style={styles.input}
-            placeholder="Organization ID (tenantId)"
-            value={manualTenantId}
-            onChangeText={setManualTenantId}
-            autoCapitalize="none"
-          />
           <TextInput
             style={styles.input}
             placeholder="Badge code"
             value={manualBadgeCode}
             onChangeText={setManualBadgeCode}
             autoCapitalize="characters"
+            autoCorrect={false}
           />
           {error && <Text style={styles.errorText}>{error}</Text>}
           {loading ? (
             <ActivityIndicator style={styles.spinner} />
           ) : (
             <TouchableOpacity
-              style={styles.button}
-              onPress={() => void attemptLogin(manualTenantId.trim(), manualBadgeCode.trim())}
-              disabled={!manualTenantId.trim() || !manualBadgeCode.trim()}
+              style={[styles.button, !manualBadgeCode.trim() && styles.buttonDisabled]}
+              onPress={() => binding && void attemptLogin(binding.tenantId, manualBadgeCode.trim())}
+              disabled={!manualBadgeCode.trim()}
             >
               <Text style={styles.buttonText}>Log In</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.linkButton} onPress={() => setMode('scan')}>
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => {
+              setError(null);
+              setMode('scan');
+            }}
+          >
             <Text style={styles.linkText}>Back to scan</Text>
           </TouchableOpacity>
         </>
@@ -130,7 +191,28 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 13,
     color: '#666',
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  bindingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  bindingText: {
+    color: '#334155',
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  bindingLink: {
+    color: '#2563eb',
+    fontWeight: '600',
+    fontSize: 13,
+    marginLeft: 12,
   },
   input: {
     borderWidth: 1,
@@ -146,6 +228,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  buttonDisabled: {
+    backgroundColor: '#93b4f5',
+  },
   buttonText: {
     color: '#fff',
     fontWeight: '600',
@@ -158,6 +243,13 @@ const styles = StyleSheet.create({
   linkText: {
     color: '#2563eb',
     fontWeight: '500',
+  },
+  hint: {
+    textAlign: 'center',
+    color: '#64748b',
+    fontSize: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
   spinner: {
     marginVertical: 12,

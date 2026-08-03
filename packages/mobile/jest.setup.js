@@ -11,3 +11,13 @@ jest.mock('react-native-vision-camera', () => ({
   useCameraPermission: () => ({ hasPermission: false, requestPermission: jest.fn() }),
   useCodeScanner: (config) => config,
 }));
+
+// Likewise native-only. exists() resolving false models a fresh,
+// unbound device — the state the smoke test should render.
+jest.mock('react-native-fs', () => ({
+  DocumentDirectoryPath: '/mock/documents',
+  exists: jest.fn().mockResolvedValue(false),
+  readFile: jest.fn().mockResolvedValue('{}'),
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  unlink: jest.fn().mockResolvedValue(undefined),
+}));

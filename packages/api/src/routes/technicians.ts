@@ -149,16 +149,23 @@ router.post("/login", badgeLoginRateLimit, async (req, res) => {
 
   const technician = await prisma.technician.findFirst({
     where: { tenantId, badgeCode },
+    include: { tenant: { select: { companyName: true } } },
   });
   if (!technician) return res.status(404).json({ error: "Badge code not recognized for this tenant" });
 
   // Trim the response to what a mobile session actually needs — no
   // reason to echo badgeCode back once it's served its purpose as a
-  // lookup key.
+  // lookup key. companyName IS included: the mobile app binds this
+  // tenant to the device (see mobile's src/lib/deviceTenant.ts) and must
+  // be able to show a human which organization the tablet is set up for,
+  // so a mis-provisioned device is visible rather than silent. Not a
+  // cross-tenant disclosure — the caller already proved knowledge of a
+  // valid (tenantId, badgeCode) pair for exactly this tenant.
   res.json({
     technicianId: technician.technicianId,
     tenantId: technician.tenantId,
     displayName: technician.displayName,
+    companyName: technician.tenant.companyName,
   });
 });
 
