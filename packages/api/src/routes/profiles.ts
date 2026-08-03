@@ -19,14 +19,18 @@
 // {pin} payload via customerProfile.ts's generateProfileQrPayload — the
 // Test Profiles editor mockup downloads/prints this per profile.
 //
-// NOT included here: the mobile app's PIN-resolution endpoint
-// (resolveProfileByPin's `/tenants/:tenantId/profiles/by-pin/:pin`) —
-// that's a technician-facing, not portal-user-facing, lookup and is
-// Sprint 3 (mobile scaffold) scope, with its own auth question to
-// resolve (badge login vs. unauthenticated) rather than portal JWT.
+// Also exposes GET /tenants/:tenantId/profiles/by-pin/:pin — the mobile
+// app's technician-facing PIN resolution (customerProfile.ts's
+// resolveProfileByPin, which already expects exactly this URL shape via
+// PROFILE_API_BASE). Deliberately NOT behind requireAuth/
+// requireTenantScope, same reasoning and same enumeration-risk
+// mitigation (rate limiting) as technicians.ts's /login: there is no
+// portal session at this point in the mobile flow, and a PIN is a
+// low-entropy, non-secret identifier by the same design as badgeCode.
 
 import { Router } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
+import rateLimit from "express-rate-limit";
 import { TEST_CATALOG, generateProfileQrPayload } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
@@ -37,6 +41,26 @@ const prisma = new PrismaClient();
 
 const PIN_PATTERN = /^\d{4,6}$/;
 const VALID_TEST_IDS = new Set(TEST_CATALOG.map((t) => t.testId));
+
+// Same enumeration concern as technicians.ts's badgeLoginRateLimit — a
+// PIN is short and non-secret, and tenantId isn't secret either (it's
+// printed on the same profile QR poster this lookup is resolving).
+const pinLookupRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many lookup attempts. Try again later." },
+});
+
+router.get("/tenants/:tenantId/profiles/by-pin/:pin", pinLookupRateLimit, async (req, res) => {
+  const { tenantId, pin } = req.params;
+  const profile = await prisma.customerProfile.findFirst({
+    where: { tenantId, pin },
+  });
+  if (!profile) return res.status(404).json({ error: "PIN not recognized for this tenant" });
+  res.json(profile);
+});
 
 function validateEnabledTestIds(enabledTestIds: unknown): string[] | null {
   if (!Array.isArray(enabledTestIds) || !enabledTestIds.every((t) => typeof t === "string")) {
