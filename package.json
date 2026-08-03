@@ -1,0 +1,21 @@
+{
+  "name": "device-diagnostics-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/shared",
+    "packages/api",
+    "packages/portal"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=packages/api",
+    "dev:portal": "npm run dev --workspace=packages/portal",
+    "build:shared": "npm run build --workspace=packages/shared",
+    "db:generate": "npm run db:generate --workspace=packages/api",
+    "db:migrate": "npm run db:migrate --workspace=packages/api",
+    "db:studio": "npm run db:studio --workspace=packages/api"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

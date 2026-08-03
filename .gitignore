@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.next/
+.env
+*.log
+.DS_Store
+packages/api/prisma/dev.db
+.turbo/

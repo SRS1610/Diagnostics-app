@@ -1,0 +1,22 @@
+{
+  "name": "@diagnostics/portal",
+  "version": "0.1.0",
+  "description": "Tenant admin web portal + Master Console — Sprint 6 deliverable. Scaffold with `npx create-next-app@latest . --typescript --tailwind --app` inside this folder, then wire against the mockups in /mockups and the API in packages/api.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@diagnostics/shared": "*",
+    "next": "^14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/react": "^18.3.3",
+    "@types/node": "^20.14.0"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@diagnostics/shared",
+  "version": "0.1.0",
+  "description": "Shared TypeScript types and business logic - tenant, licensing, diagnostics, trade-in, etc. Consumed by packages/api and packages/portal. The mobile app (React Native, separate repo/package due to Metro bundler constraints) mirrors these types.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.14.0",
+    "@types/qrcode": "^1.5.5"
+  }
+}

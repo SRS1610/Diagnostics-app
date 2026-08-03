@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Device History — iPhone 13 Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-soft: #f5f5f7; --line: #e5e5ea;
+    --accent: #2f6fed; --accent-soft: #eaf1ff;
+    --success: #34c759; --success-soft: #e8f9ec;
+    --warn: #ff9f0a; --warn-soft: #fff4e5;
+    --fail: #ff3b30; --fail-soft: #ffe9e8;
+    --text: #1d1d1f; --text-muted: #6e6e73; --text-faint: #a1a1a6;
+    --font: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  .page { max-width: 900px; margin: 0 auto; padding: 28px 34px 60px; }
+
+  .back-link { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); font-weight: 500; margin-bottom: 16px; }
+  .back-link svg { width: 13px; height: 13px; }
+
+  .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  .header-row h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 5px; }
+  .header-row .sub { font-size: 12.5px; color: var(--text-muted); }
+  .repeat-banner {
+    display: flex; align-items: center; gap: 8px; background: var(--warn-soft); color: #b3690b;
+    font-size: 12px; font-weight: 600; padding: 9px 14px; border-radius: 10px; margin-bottom: 20px;
+  }
+  .repeat-banner svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 20px; }
+  .card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 12px; }
+  .field-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--panel-soft); font-size: 12.5px; }
+  .field-row:last-child { border-bottom: none; }
+  .field-row .k { color: var(--text-muted); }
+  .field-row .v { font-weight: 600; }
+
+  .section-title { font-size: 15px; font-weight: 700; margin: 24px 0 14px; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 26px; }
+  .timeline::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
+  .timeline-item { position: relative; margin-bottom: 18px; }
+  .timeline-dot {
+    position: absolute; left: -26px; top: 4px; width: 13px; height: 13px; border-radius: 50%;
+    border: 2.5px solid var(--panel); box-shadow: 0 0 0 2px var(--line);
+  }
+  .dot-pass { background: var(--success); }
+  .dot-warn { background: var(--warn); }
+  .dot-fail { background: var(--fail); }
+
+  .timeline-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .timeline-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .timeline-title { font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .timeline-date { font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; }
+  .badge-pass { background: var(--success-soft); color: #1c8a3a; }
+  .badge-warn { background: var(--warn-soft); color: #b3690b; }
+  .badge-fail { background: var(--fail-soft); color: #c8281f; }
+  .status-dot-inline { width: 6px; height: 6px; border-radius: 50%; }
+
+  .timeline-meta { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  .timeline-meta b { color: var(--text); font-weight: 600; }
+
+  .grade-chip { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; font-size: 11.5px; font-weight: 700; }
+  .grade-A { background: var(--success-soft); color: #1c8a3a; }
+  .grade-B { background: var(--accent-soft); color: var(--accent); }
+  .grade-C { background: var(--warn-soft); color: #b3690b; }
+  .grade-D { background: var(--fail-soft); color: #c8281f; }
+
+  .delta-note { font-size: 11.5px; padding: 8px 11px; border-radius: 8px; margin-bottom: 10px; }
+  .delta-improve { background: var(--success-soft); color: #1c8a3a; }
+  .delta-worsen { background: var(--fail-soft); color: #c8281f; }
+
+  .view-link { color: var(--accent); font-weight: 600; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+      <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:var(--accent); background:var(--accent-soft); padding:5px 12px; border-radius:100px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg>
+        Acme Wireless
+      </span>
+      <span style="font-size:10.5px; color:var(--text-faint);">Scoped to this tenant only</span>
+    </div>
+
+  <div class="back-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to Devices</div>
+
+  <div class="header-row">
+    <div>
+      <h1>iPhone 13 Pro</h1>
+      <div class="sub">Serial GX2P891LQR7 · IMEI 01 3845 2201 · 3 inspections on record</div>
+    </div>
+  </div>
+
+  <div class="repeat-banner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+    This device has been inspected 3 times, with a worsening grade trend (A → B → D) — worth a closer look before it moves further in the pipeline.
+  </div>
+
+  <div class="card">
+    <div class="card-title">Device Identity</div>
+    <div class="field-row"><span class="k">Make / Model</span><span class="v">Apple iPhone 13 Pro</span></div>
+    <div class="field-row"><span class="k">Serial Number</span><span class="v">GX2P891LQR7</span></div>
+    <div class="field-row"><span class="k">IMEI</span><span class="v">01 3845 2201</span></div>
+    <div class="field-row"><span class="k">Country of Origin</span><span class="v">China</span></div>
+  </div>
+
+  <div class="section-title">Inspection Timeline</div>
+  <div class="timeline">
+
+    <div class="timeline-item">
+      <div class="timeline-dot dot-fail"></div>
+      <div class="timeline-card">
+        <div class="timeline-top">
+          <div>
+            <div class="timeline-title"><span class="grade-chip grade-D">D</span>Report DDA-0215</div>
+            <div class="timeline-date">Aug 2, 2026, 1:30 PM</div>
+          </div>
+          <span class="status-badge badge-fail"><span class="status-dot-inline" style="background:#c8281f;"></span>2 Failed</span>
+        </div>
+        <div class="delta-note delta-worsen">Grade dropped from B to D since the last inspection — screen crack newly detected on this pass.</div>
+        <div class="timeline-meta">Technician: <b>J. Alvarez</b> &nbsp;·&nbsp; Bay 04 &nbsp;·&nbsp; 3 flagged, 2 of which failed</div>
+        <span class="view-link">View Full Report →</span>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-dot dot-warn"></div>
+      <div class="timeline-card">
+        <div class="timeline-top">
+          <div>
+            <div class="timeline-title"><span class="grade-chip grade-B">B</span>Report DDA-0148</div>
+            <div class="timeline-date">Jul 14, 2026, 10:22 AM</div>
+          </div>
+          <span class="status-badge badge-warn"><span class="status-dot-inline" style="background:#b3690b;"></span>1 Flagged</span>
+        </div>
+        <div class="delta-note delta-worsen">Grade dropped from A to B — minor housing scratch detected, not present on first inspection.</div>
+        <div class="timeline-meta">Technician: <b>M. Torres</b> &nbsp;·&nbsp; Bay 02 &nbsp;·&nbsp; Battery health borderline at 81%</div>
+        <span class="view-link">View Full Report →</span>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-dot dot-pass"></div>
+      <div class="timeline-card">
+        <div class="timeline-top">
+          <div>
+            <div class="timeline-title"><span class="grade-chip grade-A">A</span>Report DDA-0091</div>
+            <div class="timeline-date">Jun 2, 2026, 3:47 PM</div>
+          </div>
+          <span class="status-badge badge-pass"><span class="status-dot-inline" style="background:#1c8a3a;"></span>All Pass</span>
+        </div>
+        <div class="timeline-meta">Technician: <b>J. Alvarez</b> &nbsp;·&nbsp; Bay 04 &nbsp;·&nbsp; First inspection on record for this device</div>
+        <span class="view-link">View Full Report →</span>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>

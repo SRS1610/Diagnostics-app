@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Test Profiles — Admin Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-soft: #f5f5f7; --line: #e5e5ea;
+    --accent: #2f6fed; --accent-soft: #eaf1ff;
+    --success: #34c759; --success-soft: #e8f9ec;
+    --warn: #ff9f0a; --warn-soft: #fff4e5;
+    --text: #1d1d1f; --text-muted: #6e6e73; --text-faint: #a1a1a6;
+    --font: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  .app { display: flex; min-height: 100vh; }
+
+  .sidebar { width: 216px; background: var(--panel); border-right: 1px solid var(--line); flex-shrink: 0; padding: 22px 14px; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 28px; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display:flex; align-items:center; justify-content:center; }
+  .brand-mark svg { width: 14px; height: 14px; }
+  .brand-name { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 2px; }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .sidebar-footer { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid var(--line); display:flex; align-items:center; gap: 10px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel-soft); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--text-muted); flex-shrink:0; }
+  .sidebar-footer .who { font-size: 11.5px; }
+  .sidebar-footer .who .name { font-weight: 600; }
+  .sidebar-footer .who .role { color: var(--text-faint); font-size: 10.5px; }
+
+  .main { flex: 1; padding: 26px 34px 40px; max-width: 1240px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
+  .topbar h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .topbar .sub { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
+  .btn { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px; padding: 9px 15px; border-radius: 100px; }
+  .btn svg { width: 13px; height: 13px; }
+  .btn-primary { background: var(--text); color: #fff; }
+  .btn-secondary { background: var(--panel); color: var(--text); border: 1px solid var(--line); }
+
+  .content-row { display: grid; grid-template-columns: 1fr 1.15fr; gap: 16px; align-items: start; }
+
+  /* Profile list */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 13.5px; font-weight: 700; }
+  .profile-row {
+    display: flex; align-items: center; justify-content: space-between; padding: 13px 18px;
+    border-bottom: 1px solid var(--panel-soft);
+  }
+  .profile-row:last-child { border-bottom: none; }
+  .profile-row.selected { background: var(--accent-soft); }
+  .profile-name { font-weight: 600; font-size: 13px; }
+  .profile-meta { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+  .pin-chip { font-family: monospace; font-size: 11.5px; background: var(--panel-soft); padding: 3px 9px; border-radius: 100px; font-weight: 600; letter-spacing: 0.05em; }
+  .test-count-chip { font-size: 11px; color: var(--accent); font-weight: 700; }
+
+  /* Editor panel */
+  .editor-header { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .editor-header .title { font-size: 14.5px; font-weight: 700; margin-bottom: 3px; }
+  .editor-header .sub { font-size: 11.5px; color: var(--text-muted); }
+
+  .form-row { padding: 14px 20px; border-bottom: 1px solid var(--panel-soft); }
+  .form-row label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 7px; }
+  .form-input {
+    background: var(--panel-soft); border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 12px; font-size: 13px; font-weight: 500; width: 100%;
+  }
+  .pin-input-row { display: flex; gap: 8px; align-items: center; }
+  .pin-input-row .form-input { width: 90px; text-align: center; font-family: monospace; letter-spacing: 0.1em; }
+  .pin-hint { font-size: 10.5px; color: var(--text-faint); }
+
+  .test-selector { padding: 14px 20px; }
+  .test-selector-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 10px; }
+  .component-group { margin-bottom: 14px; }
+  .component-group-title {
+    display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; font-weight: 700;
+    margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--panel-soft);
+  }
+  .select-all-lbl { font-size: 10.5px; color: var(--accent); font-weight: 600; }
+  .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 14px; }
+  .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .checkbox-box {
+    width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--line); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .checkbox-box.checked { background: var(--accent); border-color: var(--accent); }
+  .checkbox-box.checked svg { width: 10px; height: 10px; }
+  .checkbox-item.disabled { color: var(--text-faint); }
+
+  .editor-footer { padding: 14px 20px; display: flex; justify-content: flex-end; gap: 9px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <div class="brand-name">Diagnostics Admin</div>
+    </div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>Reports</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Devices</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 2v4M17 2v4M3 10h18"/><path d="M9 14h.01M12 14h.01M15 14h.01"/></svg>Test Profiles</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Team</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>Activity Log</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82"/></svg>Settings</div>
+    <div class="sidebar-footer">
+      <div class="avatar">JA</div>
+      <div class="who"><div class="name">J. Alvarez</div><div class="role">Warehouse Lead</div></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+      <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:var(--accent); background:var(--accent-soft); padding:5px 12px; border-radius:100px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg>
+        Acme Wireless
+      </span>
+      <span style="font-size:10.5px; color:var(--text-faint);">Scoped to this tenant only</span>
+    </div>
+    <div class="topbar">
+      <div>
+        <h1>Test Profiles</h1>
+        <div class="sub">Define which tests run for each customer, selected by PIN at session start</div>
+      </div>
+      <div class="btn btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>New Profile</div>
+    </div>
+
+    <div class="content-row">
+
+      <!-- Profile list -->
+      <div class="card">
+        <div class="card-header">Customer Profiles (4)</div>
+        <div class="profile-row selected">
+          <div>
+            <div class="profile-name">Acme Wireless</div>
+            <div class="profile-meta">Updated Jul 29 · 9 tests</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="pin-chip">4726</span>
+          </div>
+        </div>
+        <div class="profile-row">
+          <div>
+            <div class="profile-name">TechTrade Refurb</div>
+            <div class="profile-meta">Updated Jul 22 · 22 tests</div>
+          </div>
+          <span class="pin-chip">1198</span>
+        </div>
+        <div class="profile-row">
+          <div>
+            <div class="profile-name">Carrier Trade-In Program</div>
+            <div class="profile-meta">Updated Jul 18 · 6 tests</div>
+          </div>
+          <span class="pin-chip">5502</span>
+        </div>
+        <div class="profile-row">
+          <div>
+            <div class="profile-name">Default (Full Suite)</div>
+            <div class="profile-meta">Updated Jun 30 · 34 tests</div>
+          </div>
+          <span class="pin-chip">0000</span>
+        </div>
+      </div>
+
+      <!-- Editor -->
+      <div class="card">
+        <div class="editor-header">
+          <div class="title">Acme Wireless</div>
+          <div class="sub">Technicians enter this PIN at session start to load this test set</div>
+        </div>
+
+        <div class="form-row">
+          <label>Profile Name</label>
+          <input class="form-input" value="Acme Wireless" readonly />
+        </div>
+
+        <div class="form-row">
+          <label>PIN</label>
+          <div class="pin-input-row">
+            <input class="form-input" value="4726" readonly />
+            <span class="pin-hint">Must be unique across all profiles</span>
+          </div>
+        </div>
+
+        <div class="form-row" style="display:flex; align-items:center; gap:16px;">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAACWAQAAAAAUekxPAAAA5UlEQVR4nOWWsW1DMQxEnywBLpUNMoq0mVfjKh4gANXz41LI34UDpDOLhBXB5gG8w5FFvNZx+TGCvzJDDlBl1QcAI5K4Q1J16KqSPId7AUqZdAtglfYmxmu1Z3eNdzF+467bUUYi99RXilR9Tz/7yPbzo6yeXZKf12xrNog1WfP4yNJXVh35iC7JMvUN2L4CsvbMDivJYMipeVzbq44uuiLZzz6im3zkcR1gJ4acmuernVcWXXvbKdwGFAZr1q8ZCM/9Bbodn9ZWycqNc7Zu9T5hXO8z/R5ZQLafnZ2WWTlZ/tkf+w1ws8QOb7y9hgAAAABJRU5ErkJggg==" style="width:88px; height:88px; border-radius:10px; border:1px solid var(--line); padding:4px; background:#fff;" />
+          <div>
+            <label style="margin-bottom:4px;">Profile QR Code</label>
+            <div class="pin-hint" style="margin-bottom:8px;">Technicians scan this to load the profile — post it at this customer's intake station.</div>
+            <div style="display:flex; gap:8px;">
+              <div class="btn btn-secondary" style="padding:6px 12px; font-size:11px;">Download</div>
+              <div class="btn btn-secondary" style="padding:6px 12px; font-size:11px;">Print</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="test-selector">
+          <div class="test-selector-title">Required Tests (9 selected)</div>
+
+          <div class="component-group">
+            <div class="component-group-title"><span>Display &amp; Touchscreen</span><span class="select-all-lbl">Select all</span></div>
+            <div class="checkbox-grid">
+              <div class="checkbox-item"><div class="checkbox-box checked"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>Display (LCD)</div>
+              <div class="checkbox-item"><div class="checkbox-box checked"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>Touch Digitizer</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Multi-touch</div>
+            </div>
+          </div>
+
+          <div class="component-group">
+            <div class="component-group-title"><span>Camera System</span><span class="select-all-lbl">Select all</span></div>
+            <div class="checkbox-grid">
+              <div class="checkbox-item"><div class="checkbox-box checked"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>Front Camera</div>
+              <div class="checkbox-item"><div class="checkbox-box checked"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>Back Camera</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Flashlight</div>
+            </div>
+          </div>
+
+          <div class="component-group">
+            <div class="component-group-title"><span>Battery &amp; Charging</span><span class="select-all-lbl">Select all</span></div>
+            <div class="checkbox-grid">
+              <div class="checkbox-item"><div class="checkbox-box checked"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>Battery Health</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Charge Level</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Wireless Charging</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Charging Port</div>
+            </div>
+          </div>
+
+          <div class="component-group">
+            <div class="component-group-title"><span>Audio — Speakers &amp; Microphones</span><span class="select-all-lbl">Select all</span></div>
+            <div class="checkbox-grid">
+              <div class="checkbox-item"><div class="checkbox-box checked"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>Loudspeaker</div>
+              <div class="checkbox-item"><div class="checkbox-box checked"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>Microphone</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Earpiece</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Speaker Confirmation</div>
+            </div>
+          </div>
+
+          <div class="component-group">
+            <div class="component-group-title"><span>Housing &amp; Cosmetics</span><span class="select-all-lbl">Select all</span></div>
+            <div class="checkbox-grid">
+              <div class="checkbox-item"><div class="checkbox-box checked"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>Cosmetic Grading</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Country of Origin</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Liquid Damage</div>
+              <div class="checkbox-item disabled"><div class="checkbox-box"></div>Glass Condition</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-footer">
+          <div class="btn btn-secondary">Cancel</div>
+          <div class="btn btn-primary">Save Profile</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

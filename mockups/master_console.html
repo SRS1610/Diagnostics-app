@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Master Console — Diagnostics Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161c; --panel: #1c1f28; --panel-soft: #22252f; --line: #2c2f3a;
+    --accent: #6f8bff; --accent-soft: #262c47;
+    --success: #34c759; --success-soft: #16301f;
+    --warn: #ff9f0a; --warn-soft: #3a2a10;
+    --fail: #ff453a; --fail-soft: #3a1a18;
+    --text: #f2f3f5; --text-muted: #9a9ea8; --text-faint: #6b6f79;
+    --font: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  .app { display: flex; min-height: 100vh; }
+
+  .sidebar { width: 220px; background: var(--panel); border-right: 1px solid var(--line); flex-shrink: 0; padding: 22px 14px; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 10px; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display:flex; align-items:center; justify-content:center; }
+  .brand-mark svg { width: 14px; height: 14px; }
+  .brand-name { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+  .master-tag {
+    font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft); padding: 4px 10px; border-radius: 100px;
+    margin: 0 10px 24px; display: inline-block; width: fit-content;
+  }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 2px; }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .sidebar-footer { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid var(--line); display:flex; align-items:center; gap: 10px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel-soft); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--text-muted); flex-shrink:0; }
+  .sidebar-footer .who { font-size: 11.5px; }
+  .sidebar-footer .who .name { font-weight: 600; }
+  .sidebar-footer .who .role { color: var(--accent); font-size: 10px; font-weight: 700; }
+
+  .main { flex: 1; padding: 26px 34px 40px; max-width: 1260px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; }
+  .topbar h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .topbar .sub { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; margin-bottom: 22px; }
+  .btn { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px; padding: 9px 16px; border-radius: 100px; }
+  .btn svg { width: 13px; height: 13px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 17px 19px; }
+  .stat-card .lbl { font-size: 11.5px; color: var(--text-muted); font-weight: 500; margin-bottom: 6px; }
+  .stat-card .val { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; }
+  .stat-card .delta { font-size: 11px; font-weight: 600; margin-top: 4px; color: var(--success); }
+
+  .table-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .table-toolbar { padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 700; display:flex; justify-content:space-between; align-items:center; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 10.5px; color: var(--text-faint); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel-soft); }
+  td { padding: 12px 18px; border-bottom: 1px solid var(--panel-soft); font-size: 12.5px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+
+  .tenant-cell { display: flex; align-items: center; gap: 10px; }
+  .tenant-logo { width: 30px; height: 30px; border-radius: 8px; background: var(--panel-soft); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text-muted); }
+  .tenant-name { font-weight: 600; }
+  .tenant-id { font-size: 10px; color: var(--text-faint); font-family: monospace; }
+
+  .plan-chip { display: inline-flex; font-size: 10.5px; font-weight: 700; padding: 3px 10px; border-radius: 100px; background: var(--accent-soft); color: var(--accent); }
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; }
+  .badge-pass { background: var(--success-soft); color: #4ade80; }
+  .badge-warn { background: var(--warn-soft); color: #fbbf24; }
+  .badge-fail { background: var(--fail-soft); color: #f87171; }
+
+  .view-link { color: var(--accent); font-weight: 600; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <div class="brand-name">Diagnostics Platform</div>
+    </div>
+    <div class="master-tag">Master Console</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>All Tenants</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Platform Analytics</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Revenue &amp; Billing</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82"/></svg>Platform Settings</div>
+    <div class="sidebar-footer">
+      <div class="avatar">SK</div>
+      <div class="who"><div class="name">S. Kapoor</div><div class="role">MASTER ADMIN</div></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1>All Tenants</h1>
+        <div class="sub">Every company using the platform — this view aggregates across all of them; each tenant's own data stays isolated to their portal</div>
+      </div>
+      <div class="btn btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>New Tenant</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-card"><div class="lbl">Active Tenants</div><div class="val">27</div><div class="delta">↑ 3 this month</div></div>
+      <div class="stat-card"><div class="lbl">Total Devices Processed</div><div class="val">48,912</div><div class="delta">↑ 12% MoM</div></div>
+      <div class="stat-card"><div class="lbl">Monthly Recurring Revenue</div><div class="val">$38,400</div><div class="delta">↑ 6.1%</div></div>
+      <div class="stat-card"><div class="lbl">Tenants Past Due</div><div class="val" style="color:#f87171;">2</div></div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">
+        <span>Tenants</span>
+      </div>
+      <table>
+        <tr><th>Company</th><th>Plan</th><th>Devices (30d)</th><th>Status</th><th>Since</th><th></th></tr>
+        <tr>
+          <td><div class="tenant-cell"><div class="tenant-logo">AW</div><div><div class="tenant-name">Acme Wireless</div><div class="tenant-id">TEN-88201</div></div></div></td>
+          <td><span class="plan-chip">Per-Inspection</span></td>
+          <td>358</td>
+          <td><span class="status-badge badge-pass">Active</span></td>
+          <td>Feb 2026</td>
+          <td><span class="view-link">Enter Tenant View →</span></td>
+        </tr>
+        <tr>
+          <td><div class="tenant-cell"><div class="tenant-logo">TT</div><div><div class="tenant-name">TechTrade Refurb</div><div class="tenant-id">TEN-77104</div></div></div></td>
+          <td><span class="plan-chip">Seat Subscription</span></td>
+          <td>1,204</td>
+          <td><span class="status-badge badge-warn">Seats Full</span></td>
+          <td>Nov 2025</td>
+          <td><span class="view-link">Enter Tenant View →</span></td>
+        </tr>
+        <tr>
+          <td><div class="tenant-cell"><div class="tenant-logo">CT</div><div><div class="tenant-name">Carrier Trade-In Program</div><div class="tenant-id">TEN-91205</div></div></div></td>
+          <td><span class="plan-chip">Enterprise Unlimited</span></td>
+          <td>3,891</td>
+          <td><span class="status-badge badge-pass">Active</span></td>
+          <td>Jan 2025</td>
+          <td><span class="view-link">Enter Tenant View →</span></td>
+        </tr>
+        <tr>
+          <td><div class="tenant-cell"><div class="tenant-logo">RW</div><div><div class="tenant-name">ReWear Wireless</div><div class="tenant-id">TEN-40982</div></div></div></td>
+          <td><span class="plan-chip">Tiered Subscription</span></td>
+          <td>612</td>
+          <td><span class="status-badge badge-fail">Past Due</span></td>
+          <td>Jul 2026</td>
+          <td><span class="view-link">Enter Tenant View →</span></td>
+        </tr>
+        <tr>
+          <td><div class="tenant-cell"><div class="tenant-logo">NB</div><div><div class="tenant-name">NextByte Mobile</div><div class="tenant-id">TEN-50331</div></div></div></td>
+          <td><span class="plan-chip">Per-Inspection</span></td>
+          <td>44</td>
+          <td><span class="status-badge badge-warn">Trial</span></td>
+          <td>Jul 2026</td>
+          <td><span class="view-link">Enter Tenant View →</span></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>

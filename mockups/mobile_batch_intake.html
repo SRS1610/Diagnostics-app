@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Batch Intake — Mobile Screens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-soft: #f5f5f7; --line: #e5e5ea;
+    --accent: #2f6fed; --accent-soft: #eaf1ff;
+    --success: #34c759; --success-soft: #e8f9ec;
+    --text: #1d1d1f; --text-muted: #6e6e73; --text-faint: #a1a1a6;
+    --font: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); padding: 40px 0 60px; -webkit-font-smoothing: antialiased; }
+  .page-header { max-width: 1000px; margin: 0 auto 30px; padding: 0 40px; }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 8px; }
+  .page-header p { color: var(--text-muted); font-size: 14px; max-width: 600px; line-height: 1.6; margin: 0; }
+  .filmstrip { display: flex; gap: 24px; padding: 0 40px; overflow-x: auto; }
+  .step { flex: 0 0 auto; width: 264px; }
+  .step-title { font-weight: 600; font-size: 14px; margin-bottom: 12px; }
+  .phone { width: 264px; height: 540px; background: #e4e4e9; border-radius: 36px; padding: 8px; box-shadow: 0 0 0 1px #d5d5da, 0 24px 50px -22px rgba(0,0,0,0.22); position: relative; }
+  .notch { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 92px; height: 18px; background: #e4e4e9; border-radius: 0 0 12px 12px; z-index: 5; }
+  .screen { width: 100%; height: 100%; background: var(--panel); border-radius: 28px; overflow: hidden; display: flex; flex-direction: column; }
+  .status-bar { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; font-size: 9.5px; color: var(--text-faint); flex-shrink: 0; font-weight: 600; }
+  .screen-body { flex: 1; padding: 4px 18px 20px; display: flex; flex-direction: column; }
+  .icon-badge { width: 38px; height: 38px; border-radius: 11px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .icon-badge svg { width: 19px; height: 19px; }
+  .screen-heading { font-weight: 700; font-size: 17px; margin-bottom: 5px; }
+  .screen-instruction { color: var(--text-muted); font-size: 12px; line-height: 1.5; margin-bottom: 14px; }
+  .btn { display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12.5px; padding: 13px; border-radius: 100px; }
+  .btn-primary { background: var(--text); color: #fff; }
+  .btn-secondary { background: var(--panel-soft); color: var(--text); border: 1px solid var(--line); }
+  .card { background: var(--panel-soft); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  .field-row { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 5px; color: var(--text-muted); }
+  .field-row span:last-child { color: var(--text); font-weight: 600; }
+  .device-list { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 6px; }
+  .device-row { display: flex; justify-content: space-between; align-items: center; background: var(--panel-soft); border-radius: 10px; padding: 9px 12px; font-size: 11.5px; }
+  .device-row .serial { font-family: monospace; font-size: 10px; color: var(--text-faint); }
+  .caption { margin-top: 14px; font-size: 11px; color: var(--text-muted); line-height: 1.5; max-width: 264px; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Batch Intake</h1>
+    <p>A separate mode from the standard per-device flow — branches off right after Technician Login when processing a bulk lot (carrier buyback, corporate refresh) instead of a single device.</p>
+  </div>
+  <div class="filmstrip">
+
+    <div class="step">
+      <div class="step-title">1. Start Batch</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:00</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9M14 17H5M17 4l3 3-3 3M7 20l-3-3 3-3"/></svg></div>
+            <div class="screen-heading">New Batch Lot</div>
+            <div class="screen-instruction">One profile applies to every device in this batch.</div>
+            <div class="card">
+              <div class="field-row"><span>Source</span><span>Carrier Buyback #4521</span></div>
+              <div class="field-row"><span>Profile</span><span>TechTrade Refurb</span></div>
+              <div class="field-row"><span>Expected Count</span><span>48 devices</span></div>
+            </div>
+            <div class="btn btn-primary" style="margin-top:auto;">Start Scanning</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-title">2. Scan Devices</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:04</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></svg></div>
+            <div class="screen-heading">12 of 48 scanned</div>
+            <div class="screen-instruction">Scan each device's barcode. Re-scanning a duplicate is a no-op.</div>
+            <div class="device-list">
+              <div class="device-row"><span>iPhone 14</span><span class="serial">FVFXK2Q9QP3R</span></div>
+              <div class="device-row"><span>Galaxy S23</span><span class="serial">R48KX02219A</span></div>
+              <div class="device-row"><span>iPhone 13</span><span class="serial">GX2P891LQR7</span></div>
+              <div class="device-row"><span>Pixel 8</span><span class="serial">9KJ3XF01ZQ4</span></div>
+            </div>
+            <div class="btn btn-primary" style="margin-top:10px;">Finish Scanning</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-title">3. Batch Progress</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:52</span><span>94%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+            <div class="screen-heading">31 of 48 complete</div>
+            <div class="screen-instruction">Tap any device to continue its inspection.</div>
+            <div class="device-list">
+              <div class="device-row"><span>iPhone 14</span><span style="color:var(--success); font-weight:700;">✓ Done</span></div>
+              <div class="device-row"><span>Galaxy S23</span><span style="color:var(--success); font-weight:700;">✓ Done</span></div>
+              <div class="device-row"><span>iPhone 13</span><span style="color:var(--accent); font-weight:700;">In Progress</span></div>
+              <div class="device-row"><span>Pixel 8</span><span style="color:var(--text-faint); font-weight:700;">Not Started</span></div>
+            </div>
+            <div class="btn btn-secondary" style="margin-top:10px;">Pause Batch — Resume Later</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

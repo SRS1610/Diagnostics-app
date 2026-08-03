@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Device Check — Premium UI Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel-soft: #f5f5f7;
+    --line: #e5e5ea;
+    --accent: #2f6fed;
+    --accent-soft: #eaf1ff;
+    --success: #34c759;
+    --success-soft: #e8f9ec;
+    --warn: #ff9f0a;
+    --warn-soft: #fff4e5;
+    --text: #1d1d1f;
+    --text-muted: #6e6e73;
+    --text-faint: #a1a1a6;
+    --font: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    padding: 44px 0 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-header { max-width: 1120px; margin: 0 auto 34px; padding: 0 44px; }
+  .eyebrow {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--accent);
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  h1 { font-weight: 700; font-size: 32px; letter-spacing: -0.02em; margin: 0 0 10px; }
+  .page-header p { color: var(--text-muted); font-size: 15px; max-width: 640px; line-height: 1.6; margin: 0; font-weight: 400; }
+
+  .track-wrap { max-width: 1120px; margin: 0 auto; padding: 0 44px 8px; }
+  .track { position: relative; height: 8px; background: var(--line); border-radius: 100px; overflow: hidden; }
+  .track-fill {
+    position: absolute; top:0; left:0; height: 100%; width: 89%;
+    background: linear-gradient(90deg, var(--accent), #5b8cff);
+    border-radius: 100px;
+  }
+  .track-labels { display: flex; justify-content: space-between; margin-top: 10px; font-size: 11px; color: var(--text-faint); font-weight: 600; padding: 0 2px; }
+
+  .filmstrip { display: flex; gap: 26px; overflow-x: auto; padding: 10px 44px 24px; scroll-snap-type: x proximity; }
+  .filmstrip::-webkit-scrollbar { height: 8px; }
+  .filmstrip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+  .step { flex: 0 0 auto; width: 268px; scroll-snap-align: start; }
+  .step-num { font-size: 11.5px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+  .step-title { font-weight: 600; font-size: 15px; margin-bottom: 13px; }
+
+  .phone {
+    width: 268px; height: 546px; background: #e4e4e9; border-radius: 40px; padding: 8px;
+    box-shadow: 0 0 0 1px #d5d5da, 0 30px 60px -28px rgba(0,0,0,0.22);
+    position: relative;
+  }
+  .notch {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 96px; height: 20px; background: #e4e4e9; border-radius: 0 0 14px 14px; z-index: 5;
+  }
+  .screen {
+    width: 100%; height: 100%; background: var(--panel); border-radius: 32px;
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .status-bar {
+    height: 30px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; font-size: 10px; color: var(--text-faint); flex-shrink: 0; font-weight: 600;
+  }
+  .screen-body { flex: 1; padding: 8px 20px 22px; display: flex; flex-direction: column; overflow: hidden; }
+
+  .icon-badge {
+    width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center; margin-bottom: 14px;
+  }
+  .icon-badge svg { width: 20px; height: 20px; }
+
+  .screen-heading { font-weight: 700; font-size: 19px; letter-spacing: -0.01em; margin-bottom: 6px; line-height: 1.22; }
+  .screen-instruction { color: var(--text-muted); font-size: 12.5px; line-height: 1.55; margin-bottom: 16px; font-weight: 400; }
+
+  .btn {
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 13px; padding: 14px; border-radius: 100px; text-align: center;
+    letter-spacing: -0.01em;
+  }
+  .btn-primary { background: var(--text); color: #fff; }
+  .btn-secondary { background: var(--panel-soft); color: var(--text); border: 1px solid var(--line); }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; }
+
+  .card { background: var(--panel-soft); border-radius: 16px; padding: 14px 16px; border: 1px solid var(--line); }
+
+  .session-card { margin-top: auto; }
+  .session-row { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 7px; color: var(--text-muted); }
+  .session-row:last-child { margin-bottom: 0; }
+  .session-row span:last-child { color: var(--text); font-weight: 600; }
+
+  .viewfinder {
+    flex: 1; border-radius: 18px; background: #f0f0f2;
+    display: flex; align-items: center; justify-content: center; margin-bottom: 14px; position: relative;
+    border: 1px solid var(--line);
+  }
+  .reticle {
+    width: 78%; height: 54px; border: 2px solid var(--accent); border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .barcode-lines { display: flex; gap: 2px; align-items: center; height: 24px; }
+  .barcode-lines div { width: 2px; background: #b8b8bd; }
+
+  .field { margin-bottom: 11px; }
+  .field label { display: block; font-size: 10.5px; color: var(--text-faint); font-weight: 600; margin-bottom: 5px; }
+  .field .value {
+    font-size: 13px; font-weight: 500; background: var(--panel-soft); border: 1px solid var(--line);
+    border-radius: 12px; padding: 11px 13px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .tag { font-size: 8.5px; color: var(--success); font-weight: 700; }
+
+  .test-list { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+  .test-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--panel-soft); border: 1px solid var(--line); border-radius: 14px; padding: 11px 13px;
+  }
+  .test-row .name { font-size: 12px; font-weight: 500; }
+  .badge-check { width: 21px; height: 21px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink:0; }
+  .badge-pass { background: var(--success); }
+  .badge-warn { background: var(--warn); }
+  .badge-pending { background: var(--line); }
+  .badge-check svg { width: 11px; height: 11px; }
+  .progress-pill { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; font-weight: 500; }
+
+  .motion-box {
+    flex: 1; border-radius: 18px; background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center; margin-bottom: 16px;
+  }
+  .motion-box svg { width: 46px; height: 46px; }
+
+  .tone-visual { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; margin-bottom: 16px; }
+  .tone-ring {
+    width: 88px; height: 88px; border-radius: 50%; background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tone-ring svg { width: 36px; height: 36px; }
+
+  .input-box { background: var(--panel-soft); border: 1px solid var(--line); border-radius: 18px; padding: 20px; text-align: center; margin-bottom: 14px; }
+  .input-box .big-num { font-size: 36px; font-weight: 700; letter-spacing: -0.02em; }
+  .input-box .unit { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+  .helper-note { font-size: 11px; color: var(--text-faint); line-height: 1.55; margin-bottom: 16px; }
+
+  .stat-pair { display: flex; gap: 10px; margin-bottom: 16px; }
+  .stat-pair .card { flex: 1; text-align: center; padding: 16px 6px; }
+  .stat-pair .num { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+  .stat-pair .lbl { font-size: 10px; color: var(--text-muted); font-weight: 500; }
+  .mini-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 16px; }
+  .mini-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+  .done-icon { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+  .checkmark-circle {
+    width: 80px; height: 80px; border-radius: 50%; background: var(--success-soft);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .checkmark-circle svg { width: 34px; height: 34px; }
+  .report-id { font-size: 11.5px; color: var(--text-muted); font-weight: 500; }
+
+  .caption { margin-top: 15px; font-size: 11.5px; color: var(--text-muted); line-height: 1.6; max-width: 268px; }
+</style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div class="eyebrow">Refined direction</div>
+    <h1>Checking In On Your Phone</h1>
+    <p>Seventeen steps now — a technician logs in for the shift, a scanned profile QR loads the customer's test set and license, both checked before device eligibility even runs, and a priced trade-in offer closes the loop at the end. Quiet neutrals, a single confident blue, line icons instead of emoji throughout.</p>
+  </div>
+
+  <div class="track-wrap">
+    <div class="track"><div class="track-fill"></div></div>
+    <div class="track-labels"><span>Getting started</span><span>Nearly done</span></div>
+  </div>
+
+  <div class="filmstrip">
+
+    <!-- 0 -->
+    <div class="step">
+      <div class="step-num">Step 1</div>
+      <div class="step-title">Technician Login</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:00</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 7-7h2a7 7 0 0 1 7 7v1"/></svg></div>
+            <div class="screen-heading">Start your shift</div>
+            <div class="screen-instruction">Scan your badge or enter your code — this attributes your work for QA and dispute records, separate from the customer PIN you'll enter per device.</div>
+            <div class="card" style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+              <div style="width:34px; height:34px; border-radius:50%; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:var(--accent);">JA</div>
+              <div>
+                <div style="font-weight:700; font-size:12.5px;">J. Alvarez</div>
+                <div style="font-size:10px; color:var(--text-faint);">Badge recognized</div>
+              </div>
+            </div>
+            <div class="btn btn-primary" style="margin-top:auto;">Start Shift</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Session-level, not per-device — one login per shift. This is what makes redo history, dispute notes, and QA metrics actually attributable to a real person.</div>
+    </div>
+
+    <!-- 1 -->
+    <div class="step">
+      <div class="step-num">Step 2</div>
+      <div class="step-title">Scan Profile</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:40</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M14 21h7v-4M21 14v3"/></svg></div>
+            <div class="screen-heading">Scan the profile QR code</div>
+            <div class="screen-instruction">Find it posted at this customer's intake station — it loads the right test set automatically.</div>
+            <div class="viewfinder" style="margin-bottom:10px;">
+              <div class="reticle" style="width:56%; height:56%; border-radius:14px;">
+                <svg viewBox="0 0 60 60" width="70%" height="70%"><rect x="4" y="4" width="14" height="14" fill="none" stroke="#2f6fed" stroke-width="2.5"/><rect x="42" y="4" width="14" height="14" fill="none" stroke="#2f6fed" stroke-width="2.5"/><rect x="4" y="42" width="14" height="14" fill="none" stroke="#2f6fed" stroke-width="2.5"/><rect x="26" y="26" width="8" height="8" fill="#2f6fed"/></svg>
+              </div>
+            </div>
+            <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <span style="font-size:11px; color:var(--text-muted); font-weight:500;">Profile Found</span>
+              <span style="font-weight:700; font-size:12.5px;">Acme Wireless · 9 tests</span>
+            </div>
+            <div class="btn btn-primary" style="margin-bottom:8px;">Continue</div>
+            <div class="btn btn-secondary">Can't scan? Enter PIN manually</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Scan-first, same pattern as device ID capture — manual PIN entry is still there as a fallback, not the default path.</div>
+    </div>
+
+    <!-- 2b -->
+    <div class="step">
+      <div class="step-num">Step 3</div>
+      <div class="step-title">License Check</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:40</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+            <div class="screen-heading">Verifying license</div>
+            <div class="screen-instruction">Confirming Acme Wireless is licensed to run this inspection.</div>
+            <div class="card" style="margin-bottom:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:11.5px; font-weight:500;">Plan</span>
+                <span style="font-size:11px; font-weight:700;">Per-Inspection</span>
+              </div>
+            </div>
+            <div class="card" style="margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:11.5px; font-weight:500;">Credits Remaining</span>
+                <span style="font-size:11px; font-weight:700; color:var(--success);">142 / 500</span>
+              </div>
+            </div>
+            <div class="btn btn-primary" style="margin-top:auto;">Continue</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Checked before the eligibility gate too — no point running a blacklist lookup on a session the org isn't licensed to run in the first place.</div>
+    </div>
+
+    <!-- 1b -->
+    <div class="step">
+      <div class="step-num">Step 4</div>
+      <div class="step-title">Device Check</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:40</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+            <div class="screen-heading">Checking device eligibility</div>
+            <div class="screen-instruction">Verifying blacklist status and activation lock before we begin.</div>
+            <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="font-size:11.5px; font-weight:500;">Blacklist Status</span>
+              <span style="font-size:11px; font-weight:700; color:var(--success); display:flex; align-items:center; gap:5px;"><svg viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="3" stroke-linecap="round" width="12" height="12"><path d="M20 6L9 17l-5-5"/></svg>Clean</span>
+            </div>
+            <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <span style="font-size:11.5px; font-weight:500;">Activation Lock</span>
+              <span style="font-size:11px; font-weight:700; color:var(--success); display:flex; align-items:center; gap:5px;"><svg viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="3" stroke-linecap="round" width="12" height="12"><path d="M20 6L9 17l-5-5"/></svg>Not Enabled</span>
+            </div>
+            <div class="btn btn-primary" style="margin-top:auto;">Continue</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">This gate runs before anything else — a locked or blacklisted device stops right here, before five minutes get spent testing it.</div>
+    </div>
+
+    <!-- 2 -->
+    <div class="step">
+      <div class="step-num">Step 5</div>
+      <div class="step-title">Welcome</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:41</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M11 18h2"/></svg></div>
+            <div class="screen-heading">Let's check your phone's health</div>
+            <div class="screen-instruction">9 tests configured for Acme Wireless. Takes about four minutes.</div>
+            <div class="btn btn-primary" style="margin-top:auto;">Get Started</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">The instruction line now reflects the loaded profile — the technician sees exactly what will (and won't) run before starting.</div>
+    </div>
+
+    <!-- 2 -->
+    <div class="step">
+      <div class="step-num">Step 6</div>
+      <div class="step-title">Find Your ID</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:41</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></svg></div>
+            <div class="screen-heading">Scan the barcode</div>
+            <div class="screen-instruction">Find it on the box, the SIM tray, or by dialing <b>*#06#</b>. Line it up below.</div>
+            <div class="viewfinder">
+              <div class="reticle">
+                <div class="barcode-lines">
+                  <div style="height:24px"></div><div style="height:15px"></div><div style="height:24px"></div><div style="height:10px"></div><div style="height:24px"></div><div style="height:18px"></div><div style="height:24px"></div><div style="height:12px"></div><div style="height:24px"></div>
+                </div>
+              </div>
+            </div>
+            <div class="btn btn-secondary">Enter it manually</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">A refined corner-bracket viewfinder rather than a dashed reticle — quieter, more precise.</div>
+    </div>
+
+    <!-- 3 -->
+    <div class="step">
+      <div class="step-num">Step 7</div>
+      <div class="step-title">Confirm</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:42</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+            <div class="screen-heading">Does this look right?</div>
+            <div class="screen-instruction">We read these automatically. Edit anything that needs a fix.</div>
+            <div class="field"><label>Phone</label><div class="value">iPhone 14 <span class="tag">Verified</span></div></div>
+            <div class="field"><label>Serial Number</label><div class="value">FVFXK2Q9QP3R <span class="tag">Verified</span></div></div>
+            <div class="field"><label>IMEI</label><div class="value">35 2185 0781 2345 6 <span class="tag">Verified</span></div></div>
+            <div class="btn btn-primary" style="margin-top:auto;">Confirm</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">"Verified" reads calmer and more premium than a checkmark emoji + "Scanned."</div>
+    </div>
+
+    <!-- 4 -->
+    <div class="step">
+      <div class="step-num">Step 8</div>
+      <div class="step-title">Checklist</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:44</span><span>100%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+            <div class="screen-heading">4 of 9 checks complete</div>
+            <div class="progress-pill">Tap any check to try it now</div>
+            <div class="test-list">
+              <div class="test-row"><span class="name">Screen &amp; Touch</span><span class="badge-check badge-pass"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="test-row"><span class="name">Buttons</span><span class="badge-check badge-pass"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="test-row"><span class="name">Cameras</span><span class="badge-check badge-warn"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M12 8v5M12 16h.01"/></svg></span></div>
+              <div class="test-row"><span class="name">Speaker &amp; Mic</span><span class="badge-check badge-pass"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="test-row"><span class="name">Motion Sensors</span><span class="badge-check badge-pending"></span></div>
+              <div class="test-row"><span class="name">Battery</span><span class="badge-check badge-pending"></span></div>
+              <div class="test-row"><span class="name">Charging Port</span><span class="badge-check badge-pending"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Line-icon checkmarks in soft circles read cleaner at a glance than emoji ever could.</div>
+    </div>
+
+    <!-- 5 -->
+    <div class="step">
+      <div class="step-num">Step 9</div>
+      <div class="step-title">Motion Test</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:47</span><span>98%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></div>
+            <div class="screen-heading">Give your phone a gentle turn</div>
+            <div class="screen-instruction">Rotate it slowly — we're confirming it can sense the movement.</div>
+            <div class="motion-box"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M4 8a10 10 0 0 0 0 8" opacity="0.5"/><path d="M20 8a10 10 0 0 1 0 8" opacity="0.5"/></svg></div>
+            <div class="btn btn-secondary">Detecting movement…</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">One clean line-drawing replaces the phone-and-arrows emoji — same idea, quieter execution.</div>
+    </div>
+
+    <!-- 6 -->
+    <div class="step">
+      <div class="step-num">Step 10</div>
+      <div class="step-title">Sound Check</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:49</span><span>98%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg></div>
+            <div class="screen-heading">Did you hear that?</div>
+            <div class="screen-instruction">We just played a short tone through your speaker.</div>
+            <div class="tone-visual">
+              <div class="tone-ring"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5.5a9 9 0 0 1 0 13"/></svg></div>
+            </div>
+            <div class="btn-row">
+              <div class="btn btn-secondary">Not quite</div>
+              <div class="btn btn-primary">Yes</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">"Not quite" reads softer than "No" — same explicit choice, gentler tone for a premium product.</div>
+    </div>
+
+    <!-- 7 -->
+    <div class="step">
+      <div class="step-num">Step 11</div>
+      <div class="step-title">Battery Health</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:52</span><span>98%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 10v4"/></svg></div>
+            <div class="screen-heading">What's your battery health?</div>
+            <div class="screen-instruction">Open <b>Settings → Battery → Battery Health</b> and enter what you see there.</div>
+            <div class="input-box"><div class="big-num">82<span class="unit">%</span></div></div>
+            <div class="helper-note">This is the one step we need your help with — Apple keeps this number private to the Settings app.</div>
+            <div class="btn btn-primary" style="margin-top:auto;">Looks Right</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">A single outlined battery icon anchors the screen instead of an emoji — matches the rest of the icon language.</div>
+    </div>
+
+    <!-- 8b -->
+    <div class="step">
+      <div class="step-num">Step 12</div>
+      <div class="step-title">Country of Origin</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:54</span><span>97%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/></svg></div>
+            <div class="screen-heading">Where was it made?</div>
+            <div class="screen-instruction">Check the box or the small label inside the SIM tray — it usually says "Made in" or "Assembled in."</div>
+            <div class="card" style="margin-bottom: 12px;">
+              <div style="font-size: 9px; color: var(--text-faint); font-weight: 600; margin-bottom: 5px;">DETECTED FROM PHOTO</div>
+              <div style="font-size: 15px; font-weight: 700;">Vietnam</div>
+            </div>
+            <div class="helper-note">We can't read this automatically — snap a photo of the label or type it in.</div>
+            <div class="btn-row" style="margin-top:auto;">
+              <div class="btn btn-secondary">Retake Photo</div>
+              <div class="btn btn-primary">Confirm</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Same photo-and-confirm pattern as battery health and device ID — nothing here comes from an API, so the UI is upfront about that.</div>
+    </div>
+
+    <!-- 9a -->
+    <div class="step">
+      <div class="step-num">Step 13</div>
+      <div class="step-title">Cosmetic Scan</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:55</span><span>97%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+            <div class="screen-heading">Photo 3 of 6 — Back Panel</div>
+            <div class="screen-instruction">Lay the phone flat, back facing up, and fill the frame. We'll check this photo for scratches, dents, and cracks.</div>
+            <div class="viewfinder" style="flex-direction:column; gap:8px;">
+              <svg width="52" height="94" viewBox="0 0 52 94"><rect x="1" y="1" width="50" height="92" rx="10" fill="none" stroke="#c8cee0" stroke-width="1.5"/></svg>
+            </div>
+            <div class="progress-pill" style="text-align:center;">●●●○○○</div>
+            <div class="btn btn-primary">Capture Photo</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Six guided shots — front, back, and all four edges — each analyzed separately, since a screen crack and a housing dent look nothing alike to the model.</div>
+    </div>
+
+    <!-- 9b -->
+    <div class="step">
+      <div class="step-num">Step 14</div>
+      <div class="step-title">Review Damage</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:57</span><span>97%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></div>
+            <div class="screen-heading">We spotted something</div>
+            <div class="screen-instruction">Take a look and confirm — the model isn't always right.</div>
+            <div style="position:relative; background:#e9ebf1; border-radius:14px; height:118px; margin-bottom:12px; overflow:hidden;">
+              <div style="position:absolute; top:38px; left:112px; width:46px; height:22px; border:2px solid #ff3b30; border-radius:4px;"></div>
+              <div style="position:absolute; top:16px; left:112px; background:#ff3b30; color:#fff; font-size:8px; font-weight:700; padding:2px 6px; border-radius:6px;">Scratch · Minor</div>
+            </div>
+            <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <span style="font-size:11px; color:var(--text-muted); font-weight:500;">Suggested Grade</span>
+              <span style="font-weight:700; font-size:15px; color:var(--accent);">B</span>
+            </div>
+            <div class="btn-row">
+              <div class="btn btn-secondary">Adjust Grade</div>
+              <div class="btn btn-primary">Confirm</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">The suggested grade is a starting point, never the final word — nothing about condition or resale value locks in without a technician's confirm.</div>
+    </div>
+
+    <!-- 10 -->
+    <div class="step">
+      <div class="step-num">Step 15</div>
+      <div class="step-title">Results</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:58</span><span>97%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></div>
+            <div class="screen-heading">Here's how your phone did</div>
+            <div class="stat-pair">
+              <div class="card"><div class="num" style="color:var(--success)">7</div><div class="lbl">All good</div></div>
+              <div class="card"><div class="num" style="color:var(--warn)">2</div><div class="lbl">Worth a look</div></div>
+            </div>
+            <div class="mini-grid">
+              <span class="mini-dot" style="background:var(--success)"></span><span class="mini-dot" style="background:var(--success)"></span><span class="mini-dot" style="background:var(--warn)"></span><span class="mini-dot" style="background:var(--success)"></span><span class="mini-dot" style="background:var(--success)"></span><span class="mini-dot" style="background:var(--success)"></span><span class="mini-dot" style="background:var(--warn)"></span><span class="mini-dot" style="background:var(--success)"></span><span class="mini-dot" style="background:var(--success)"></span>
+            </div>
+            <div style="font-size:9.5px; color:var(--text-faint); margin-bottom:8px;">Tap any dot above to redo that check</div>
+            <div class="btn-row" style="margin-top:auto;">
+              <div class="btn btn-secondary">Redo Flagged (2)</div>
+              <div class="btn btn-primary">View Full Report</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">One tap reruns every flagged test at once — no need to redo the 7 that already passed just because 2 came back questionable.</div>
+    </div>
+
+    <!-- 13b -->
+    <div class="step">
+      <div class="step-num">Step 16</div>
+      <div class="step-title">Your Offer</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:58</span><span>97%</span></div>
+          <div class="screen-body">
+            <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+            <div class="screen-heading">Trade-in offer</div>
+            <div class="screen-instruction">Based on the grade and results above, here's what this phone is worth.</div>
+            <div class="card" style="text-align:center; padding:20px; margin-bottom:12px;">
+              <div style="font-size:32px; font-weight:700; letter-spacing:-0.02em;">$412</div>
+              <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Grade B · Offer valid 7 days</div>
+            </div>
+            <div class="field" style="margin-bottom:6px;"><div class="value" style="font-size:11px;"><span>Base price (Grade B)</span><span>$465</span></div></div>
+            <div class="field"><div class="value" style="font-size:11px; color:#b3690b;"><span>Battery health (78%)</span><span>-$15</span></div></div>
+            <div class="field"><div class="value" style="font-size:11px; color:#b3690b;"><span>Rear camera haze</span><span>-$38</span></div></div>
+            <div class="btn btn-primary" style="margin-top:auto;">Accept Offer</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Every deduction traces back to a specific flagged test — nothing about the number is opaque to the person accepting it.</div>
+    </div>
+
+    <!-- 12 -->
+    <div class="step">
+      <div class="step-num">Step 17</div>
+      <div class="step-title">Complete</div>
+      <div class="phone"><div class="notch"></div>
+        <div class="screen">
+          <div class="status-bar"><span>9:59</span><span>97%</span></div>
+          <div class="screen-body">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+              <div class="checkmark-circle" style="width:40px; height:40px; flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px;"><path d="M20 6L9 17l-5-5"/></svg></div>
+              <div>
+                <div class="screen-heading" style="margin-bottom:1px; font-size:15px;">All checks complete</div>
+                <div class="report-id" style="font-size:9.5px;">DDA-2026-08-0217</div>
+              </div>
+            </div>
+            <div class="stat-pair" style="margin-bottom:10px;">
+              <div class="card"><div class="num" style="color:var(--success); font-size:20px;">9</div><div class="lbl">All good</div></div>
+              <div class="card"><div class="num" style="color:var(--warn); font-size:20px;">3</div><div class="lbl">Worth a look</div></div>
+            </div>
+            <div class="test-list" style="gap:5px;">
+              <div class="test-row" style="padding:7px 10px;"><span class="name">Screen &amp; Touch</span><span class="badge-check badge-pass" style="width:16px;height:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="test-row" style="padding:7px 10px;"><span class="name">Buttons</span><span class="badge-check badge-pass" style="width:16px;height:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="test-row" style="padding:7px 10px;"><span class="name">Cameras</span><span class="badge-check badge-warn" style="width:16px;height:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M12 8v5M12 16h.01"/></svg></span></div>
+              <div class="test-row" style="padding:7px 10px;"><span class="name">Speaker &amp; Mic</span><span class="badge-check badge-pass" style="width:16px;height:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="test-row" style="padding:7px 10px;"><span class="name">Motion Sensors</span><span class="badge-check badge-pass" style="width:16px;height:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="test-row" style="padding:7px 10px;"><span class="name">Battery</span><span class="badge-check badge-warn" style="width:16px;height:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M12 8v5M12 16h.01"/></svg></span></div>
+              <div class="test-row" style="padding:7px 10px;"><span class="name">Cosmetic Condition</span><span class="badge-check badge-warn" style="width:16px;height:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M12 8v5M12 16h.01"/></svg></span></div>
+            </div>
+            <div class="btn-row" style="margin-top:10px;">
+              <div class="btn btn-secondary">Share</div>
+              <div class="btn btn-primary">Save</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Closes with a recap, not just a confirmation — every component and its final state is right there, so nothing about the finished report is a surprise.</div>
+    </div>
+
+  </div>
+
+</body>
+</html>

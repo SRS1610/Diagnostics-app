@@ -1,0 +1,239 @@
+// packages/api/prisma/schema.prisma
+//
+// Generated from the type definitions in packages/shared/src — this is
+// Sprint 1's primary deliverable per the project roadmap. Field names
+// and relationships mirror tenant.ts, customerProfile.ts, licensing.ts,
+// portalAuth.ts, technicianAuth.ts, adminActivityLog.ts, and types.ts
+// exactly, so the API layer can pass Prisma results straight through as
+// the TypeScript interfaces already defined.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Tenant — the top-level entity (tenant.ts)
+// ============================================================
+model Tenant {
+  tenantId           String   @id @default(cuid())
+  companyName        String
+  status             String   @default("trial") // active | suspended | trial
+  primaryContactEmail String
+  createdAt          DateTime @default(now())
+
+  profiles     CustomerProfile[]
+  licenses     License[]
+  portalUsers  PortalUser[]
+  technicians  Technician[]
+  reports      Report[]
+  activityLog  ActivityLogEntry[]
+
+  @@map("tenants")
+}
+
+// ============================================================
+// CustomerProfile — belongs WITHIN a tenant (customerProfile.ts)
+// A tenant can have multiple profiles (different programs/locations)
+// ============================================================
+model CustomerProfile {
+  profileId      String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [tenantId])
+  customerName   String
+  pin            String   // unique WITHIN tenant, not globally — see @@unique below
+  enabledTestIds String[] // Postgres text array
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  reports Report[]
+
+  @@unique([tenantId, pin]) // PIN uniqueness is per-tenant, not global
+  @@map("customer_profiles")
+}
+
+// ============================================================
+// License — bills at the TENANT level (licensing.ts)
+// ============================================================
+model License {
+  licenseId               String   @id @default(cuid())
+  tenantId                String
+  tenant                  Tenant   @relation(fields: [tenantId], references: [tenantId])
+  type                    String   // per_inspection | seat_subscription | tiered_subscription | enterprise_unlimited
+  status                  String   @default("active") // active | expired | suspended | quota_exceeded
+  billingPeriodStart      DateTime
+  billingPeriodEnd        DateTime
+  includedQuota           Int?
+  usageThisPeriod         Int      @default(0)
+  overageRatePerInspection Float?
+  seatLimit               Int?
+  activeSeats             Int      @default(0)
+
+  invoices Invoice[]
+
+  @@map("licenses")
+}
+
+model Invoice {
+  invoiceId          String   @id @default(cuid())
+  licenseId          String
+  license            License  @relation(fields: [licenseId], references: [licenseId])
+  billingPeriodStart DateTime
+  billingPeriodEnd   DateTime
+  lineItems          Json     // InvoiceLineItem[] from invoicing.ts
+  subtotal           Float
+  total              Float
+  status             String   @default("draft") // draft | sent | paid | overdue | void
+  issuedAt           DateTime @default(now())
+  dueAt              DateTime
+
+  @@map("invoices")
+}
+
+// ============================================================
+// PortalUser + PortalSession auth (portalAuth.ts)
+// ============================================================
+model PortalUser {
+  userId       String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String   // master_admin | tenant_admin | tenant_staff
+  tenantId     String?  // null ONLY for master_admin
+  tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId])
+  createdAt    DateTime @default(now())
+
+  @@map("portal_users")
+}
+
+// ============================================================
+// Technician (technicianAuth.ts) — separate identity from PortalUser;
+// this is mobile-app shift login, not portal access
+// ============================================================
+model Technician {
+  technicianId String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [tenantId])
+  displayName  String
+  badgeCode    String
+  createdAt    DateTime @default(now())
+
+  reports Report[]
+
+  @@unique([tenantId, badgeCode])
+  @@map("technicians")
+}
+
+// ============================================================
+// Report (types.ts AuditReport) + revisions (testSession.ts)
+// ============================================================
+model Report {
+  reportId       String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [tenantId])
+  profileId      String?
+  profile        CustomerProfile? @relation(fields: [profileId], references: [profileId])
+  technicianId   String?
+  technician     Technician? @relation(fields: [technicianId], references: [technicianId])
+  generatedAt    DateTime @default(now())
+  deviceMake     String
+  deviceModel    String
+  serialNumber   String
+  imei           String
+  imei2          String?
+  captureSource  String   // barcode | ocr | manual
+  results        Json     // DiagnosticResult[]
+  overallStatus  String   // pass | fail | pass_with_warnings
+  routing        String?  // resale | repair | parts_harvest | recycle | hold_ineligible
+
+  revisions           ReportRevision[]
+  wipeCertificate     DataWipeCertificate?
+  warrantyClaims      WarrantyClaim[]
+
+  @@index([tenantId, serialNumber]) // Devices tab groups by serial, within tenant
+  @@map("reports")
+}
+
+model ReportRevision {
+  id                     String   @id @default(cuid())
+  reportId               String
+  report                 Report   @relation(fields: [reportId], references: [reportId])
+  revisionNumber         Int
+  revisedAt              DateTime @default(now())
+  revisedByTechnicianId  String
+  testIdsRedone          String[]
+  reason                 String?
+
+  @@map("report_revisions")
+}
+
+model DataWipeCertificate {
+  certificateId          String   @id @default(cuid())
+  reportId                String   @unique
+  report                  Report   @relation(fields: [reportId], references: [reportId])
+  deviceSerial            String
+  imei                    String
+  standard                String   // nist_800_88_clear | nist_800_88_purge
+  wipedAt                 DateTime @default(now())
+  verifiedByTechnicianId  String
+  passed                  Boolean
+
+  @@map("data_wipe_certificates")
+}
+
+model WarrantyClaim {
+  claimId          String   @id @default(cuid())
+  reportId         String
+  report           Report   @relation(fields: [reportId], references: [reportId])
+  deviceSerial     String
+  claimedIssue     String
+  submittedAt      DateTime @default(now())
+  warrantyExpiresAt DateTime
+  status           String   @default("open") // open | investigating | approved | denied | resolved
+  resolutionNotes  String?
+
+  @@map("warranty_claims")
+}
+
+// ============================================================
+// Admin Activity Log (adminActivityLog.ts) — central audit trail
+// ============================================================
+model ActivityLogEntry {
+  entryId      String   @id @default(cuid())
+  tenantId     String?  // null for platform-level actions
+  tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId])
+  actorUserId  String
+  actorRole    String   // master_admin | tenant_admin | tenant_staff | system
+  action       String
+  targetType   String
+  targetId     String
+  details      String?
+  metadata     Json?
+  timestamp    DateTime @default(now())
+  ipAddress    String?
+
+  @@index([tenantId, timestamp])
+  @@map("activity_log")
+}
+
+// ============================================================
+// Dispute (admin_portal_disputes.html backend — not yet wired to a
+// TypeScript module; flagged in CLAUDE.md as a real gap)
+// ============================================================
+model Dispute {
+  disputeId       String   @id @default(cuid())
+  tenantId        String
+  reportId        String
+  disputingItem   String   // which test/grade is disputed
+  customerNote    String
+  status          String   @default("awaiting_review") // awaiting_review | resolved_upheld | resolved_adjusted
+  resolvedByUserId String?
+  resolutionNotes String?
+  submittedAt     DateTime @default(now())
+  resolvedAt      DateTime?
+
+  @@map("disputes")
+}

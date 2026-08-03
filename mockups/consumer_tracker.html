@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Track Your Trade-In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-soft: #f5f5f7; --line: #e5e5ea;
+    --accent: #2f6fed; --accent-soft: #eaf1ff;
+    --success: #34c759; --success-soft: #e8f9ec;
+    --warn: #ff9f0a; --warn-soft: #fff4e5;
+    --fail: #ff3b30; --fail-soft: #ffe9e8;
+    --text: #1d1d1f; --text-muted: #6e6e73; --text-faint: #a1a1a6;
+    --font: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  .page { max-width: 620px; margin: 0 auto; padding: 40px 24px 60px; }
+
+  .top-brand { display: flex; align-items: center; gap: 9px; margin-bottom: 26px; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display:flex; align-items:center; justify-content:center; }
+  .brand-mark svg { width: 14px; height: 14px; }
+  .brand-name { font-weight: 700; font-size: 14px; }
+
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
+  .sub { font-size: 12.5px; color: var(--text-muted); margin-bottom: 24px; }
+
+  .status-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin-bottom: 16px; }
+  .device-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .device-thumb { width: 44px; height: 44px; border-radius: 10px; background: var(--panel-soft); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; }
+  .device-thumb svg { width: 20px; height: 20px; color: var(--text-faint); }
+  .device-name { font-weight: 700; font-size: 15px; }
+  .device-meta { font-size: 11.5px; color: var(--text-faint); }
+
+  .progress-track { position: relative; margin: 22px 4px 8px; }
+  .progress-line { position: absolute; top: 11px; left: 0; right: 0; height: 3px; background: var(--line); border-radius: 100px; }
+  .progress-line-fill { position: absolute; top: 11px; left: 0; height: 3px; width: 68%; background: var(--accent); border-radius: 100px; }
+  .progress-steps { display: flex; justify-content: space-between; position: relative; }
+  .progress-step { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60px; }
+  .step-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--panel); border: 2.5px solid var(--line); z-index: 1; }
+  .step-dot.done { background: var(--accent); border-color: var(--accent); }
+  .step-dot.done svg { width: 11px; height: 11px; }
+  .step-dot.current { border-color: var(--accent); }
+  .step-dot.current::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .step-label { font-size: 9.5px; color: var(--text-faint); text-align: center; font-weight: 500; }
+  .step-label.active { color: var(--text); font-weight: 700; }
+
+  .status-message { background: var(--accent-soft); border-radius: 12px; padding: 13px 15px; font-size: 12.5px; color: var(--accent); font-weight: 600; margin-top: 18px; display: flex; align-items: center; gap: 8px; }
+  .status-message svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+  .offer-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin-bottom: 16px; }
+  .offer-card .card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 10px; }
+  .offer-amount { font-size: 38px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .offer-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+  .offer-breakdown { border-top: 1px solid var(--panel-soft); padding-top: 12px; margin-bottom: 16px; }
+  .offer-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
+  .offer-row .neg { color: #c8281f; }
+  .offer-row.total { font-weight: 700; border-top: 1px solid var(--panel-soft); padding-top: 8px; margin-top: 4px; }
+
+  .btn { display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700; font-size: 13.5px; padding: 13px; border-radius: 100px; }
+  .btn-primary { background: var(--text); color: #fff; }
+  .btn-secondary { background: var(--panel-soft); color: var(--text); border: 1px solid var(--line); }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; }
+
+  .link-row { text-align: center; margin-top: 14px; }
+  .link-row a { font-size: 12px; color: var(--text-muted); font-weight: 600; text-decoration: none; }
+
+  .info-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+  .info-card .card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 10px; }
+  .field-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--panel-soft); font-size: 12.5px; }
+  .field-row:last-child { border-bottom: none; }
+  .field-row .k { color: var(--text-muted); }
+  .field-row .v { font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="top-brand">
+    <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+    <div class="brand-name">Trade-In Tracker</div>
+  </div>
+
+  <h1>Your trade-in</h1>
+  <div class="sub">Order #TR-88214 &nbsp;·&nbsp; Started Aug 2, 2026</div>
+
+  <div class="status-card">
+    <div class="device-row">
+      <div class="device-thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/></svg></div>
+      <div>
+        <div class="device-name">iPhone 14, 128GB</div>
+        <div class="device-meta">Serial FVFXK2Q9QP3R</div>
+      </div>
+    </div>
+
+    <div class="progress-track">
+      <div class="progress-line"></div>
+      <div class="progress-line-fill"></div>
+      <div class="progress-steps">
+        <div class="progress-step">
+          <div class="step-dot done"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="step-label">Received</div>
+        </div>
+        <div class="progress-step">
+          <div class="step-dot done"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="step-label">Inspected</div>
+        </div>
+        <div class="progress-step">
+          <div class="step-dot current"></div>
+          <div class="step-label active">Offer Ready</div>
+        </div>
+        <div class="progress-step">
+          <div class="step-dot"></div>
+          <div class="step-label">Accepted</div>
+        </div>
+        <div class="progress-step">
+          <div class="step-dot"></div>
+          <div class="step-label">Paid</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-message">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      Your offer is ready — review the breakdown below and accept whenever you're ready.
+    </div>
+  </div>
+
+  <div class="offer-card">
+    <div class="card-title">Your Offer</div>
+    <div class="offer-amount">$412</div>
+    <div class="offer-sub">Grade B &nbsp;·&nbsp; Offer valid through Aug 9, 2026</div>
+
+    <div class="offer-breakdown">
+      <div class="offer-row"><span>Base price (Grade B, 128GB)</span><span>$465</span></div>
+      <div class="offer-row"><span class="neg">Battery health (78%)</span><span class="neg">-$15</span></div>
+      <div class="offer-row"><span class="neg">Rear camera haze</span><span class="neg">-$38</span></div>
+      <div class="offer-row total"><span>Total Offer</span><span>$412</span></div>
+    </div>
+
+    <div class="btn-row">
+      <div class="btn btn-secondary">Question About This?</div>
+      <div class="btn btn-primary">Accept Offer</div>
+    </div>
+    <div class="link-row"><a href="#">Don't agree with the grade? Request a review →</a></div>
+  </div>
+
+  <div class="info-card">
+    <div class="card-title">Details</div>
+    <div class="field-row"><span class="k">Payout method</span><span class="v">Not yet selected</span></div>
+    <div class="field-row"><span class="k">Full report</span><span class="v" style="color:var(--accent);">View PDF →</span></div>
+    <div class="field-row"><span class="k">Questions?</span><span class="v" style="color:var(--accent);">Contact support →</span></div>
+  </div>
+
+</div>
+</body>
+</html>

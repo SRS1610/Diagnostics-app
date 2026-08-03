@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Settings — Admin Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-soft: #f5f5f7; --line: #e5e5ea;
+    --accent: #2f6fed; --accent-soft: #eaf1ff;
+    --text: #1d1d1f; --text-muted: #6e6e73; --text-faint: #a1a1a6;
+    --font: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 216px; background: var(--panel); border-right: 1px solid var(--line); flex-shrink: 0; padding: 22px 14px; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 28px; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display:flex; align-items:center; justify-content:center; }
+  .brand-mark svg { width: 14px; height: 14px; }
+  .brand-name { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 2px; }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .sidebar-footer { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid var(--line); display:flex; align-items:center; gap: 10px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel-soft); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--text-muted); flex-shrink:0; }
+  .sidebar-footer .who { font-size: 11.5px; }
+  .sidebar-footer .who .name { font-weight: 600; }
+  .sidebar-footer .who .role { color: var(--text-faint); font-size: 10.5px; }
+
+  .main { flex: 1; padding: 26px 34px 40px; max-width: 760px; }
+  .topbar h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .topbar .sub { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; margin-bottom: 22px; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 16px; overflow: hidden; }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 13.5px; font-weight: 700; }
+  .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--panel-soft); }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 12.5px; font-weight: 600; }
+  .setting-hint { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+  .setting-value { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+
+  .toggle { width: 38px; height: 22px; border-radius: 100px; background: var(--line); position: relative; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+  .toggle.on::after { left: 18px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <div class="brand-name">Diagnostics Admin</div>
+    </div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>Reports</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Devices</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 2v4M17 2v4M3 10h18"/><path d="M9 14h.01M12 14h.01M15 14h.01"/></svg>Test Profiles</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Compliance</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Disputes</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Billing &amp; Licenses</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Team</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>Activity Log</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+    <div class="sidebar-footer">
+      <div class="avatar">JA</div>
+      <div class="who"><div class="name">J. Alvarez</div><div class="role">Warehouse Lead</div></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+      <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:var(--accent); background:var(--accent-soft); padding:5px 12px; border-radius:100px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg>
+        Acme Wireless
+      </span>
+      <span style="font-size:10.5px; color:var(--text-faint);">Scoped to this tenant only</span>
+    </div>
+    <div class="topbar">
+      <h1>Settings</h1>
+      <div class="sub">Organization-wide configuration</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Organization</div>
+      <div class="setting-row"><div><div class="setting-label">Organization Name</div></div><div class="setting-value">Diagnostics Admin Co.</div></div>
+      <div class="setting-row"><div><div class="setting-label">Default Location</div></div><div class="setting-value">Bay 04</div></div>
+      <div class="setting-row"><div><div class="setting-label">Timezone</div></div><div class="setting-value">America/Chicago</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Data &amp; Privacy</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Data Retention</div>
+          <div class="setting-hint">All inspection data, photos, and reports are kept indefinitely — no automatic deletion.</div>
+        </div>
+        <div class="setting-value">Forever</div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Deletion Requests</div>
+          <div class="setting-hint">Manual process — no self-service deletion tool exists yet. Contact engineering for a GDPR/CCPA request.</div>
+        </div>
+        <div class="setting-value">Manual only</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Defaults</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Cosmetic Wipe Standard</div>
+          <div class="setting-hint">Default for profiles that don't override it</div>
+        </div>
+        <div class="setting-value">NIST 800-88 Clear</div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">PIN Length</div>
+          <div class="setting-hint">4 digits — consider raising to 5-6 as active profile count grows</div>
+        </div>
+        <div class="setting-value">4 digits</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Notifications</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Customer SMS Updates</div>
+          <div class="setting-hint">Requires an SMS provider connection — not yet configured</div>
+        </div>
+        <div class="toggle"></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Customer Email Updates</div>
+          <div class="setting-hint">Requires an email provider connection — not yet configured</div>
+        </div>
+        <div class="toggle"></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Dispute Alerts to Admins</div>
+        </div>
+        <div class="toggle on"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

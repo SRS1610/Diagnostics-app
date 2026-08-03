@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Compliance &amp; ESG — Admin Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-soft: #f5f5f7; --line: #e5e5ea;
+    --accent: #2f6fed; --accent-soft: #eaf1ff;
+    --success: #34c759; --success-soft: #e8f9ec;
+    --warn: #ff9f0a; --warn-soft: #fff4e5;
+    --fail: #ff3b30; --fail-soft: #ffe9e8;
+    --purple: #af52de; --purple-soft: #f4e9fb;
+    --text: #1d1d1f; --text-muted: #6e6e73; --text-faint: #a1a1a6;
+    --font: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 216px; background: var(--panel); border-right: 1px solid var(--line); flex-shrink: 0; padding: 22px 14px; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 28px; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display:flex; align-items:center; justify-content:center; }
+  .brand-mark svg { width: 14px; height: 14px; }
+  .brand-name { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 2px; }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .sidebar-footer { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid var(--line); display:flex; align-items:center; gap: 10px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel-soft); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--text-muted); flex-shrink:0; }
+  .sidebar-footer .who { font-size: 11.5px; }
+  .sidebar-footer .who .name { font-weight: 600; }
+  .sidebar-footer .who .role { color: var(--text-faint); font-size: 10.5px; }
+
+  .main { flex: 1; padding: 26px 34px 40px; max-width: 1240px; }
+  .topbar h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .topbar .sub { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; margin-bottom: 22px; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .stat-card .lbl { font-size: 11.5px; color: var(--text-muted); font-weight: 500; margin-bottom: 6px; }
+  .stat-card .val { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+
+  .content-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .card-title { font-size: 13px; font-weight: 700; margin-bottom: 14px; }
+
+  .routing-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .routing-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .routing-label { width: 110px; font-size: 12px; font-weight: 500; }
+  .routing-bar-track { flex: 1; height: 9px; background: var(--panel-soft); border-radius: 100px; overflow: hidden; }
+  .routing-bar-fill { height: 100%; border-radius: 100px; }
+  .routing-pct { width: 40px; text-align: right; font-size: 11.5px; color: var(--text-muted); font-weight: 600; }
+
+  .wipe-summary { display: flex; align-items: center; gap: 14px; }
+  .wipe-ring { position: relative; width: 76px; height: 76px; flex-shrink: 0; }
+  .wipe-pct { font-size: 17px; font-weight: 700; }
+  .wipe-detail { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  .wipe-detail b { color: var(--text); }
+
+  .table-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .table-toolbar { padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 10.5px; color: var(--text-faint); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel-soft); }
+  td { padding: 11px 18px; border-bottom: 1px solid var(--panel-soft); font-size: 12.5px; }
+  tr:last-child td { border-bottom: none; }
+  .reason-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; background: var(--fail-soft); color: #c8281f; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <div class="brand-name">Diagnostics Admin</div>
+    </div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>Reports</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Devices</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 2v4M17 2v4M3 10h18"/><path d="M9 14h.01M12 14h.01M15 14h.01"/></svg>Test Profiles</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Compliance</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Team</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>Activity Log</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82"/></svg>Settings</div>
+    <div class="sidebar-footer">
+      <div class="avatar">JA</div>
+      <div class="who"><div class="name">J. Alvarez</div><div class="role">Warehouse Lead</div></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+      <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:var(--accent); background:var(--accent-soft); padding:5px 12px; border-radius:100px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg>
+        Acme Wireless
+      </span>
+      <span style="font-size:10.5px; color:var(--text-faint);">Scoped to this tenant only</span>
+    </div>
+    <div class="topbar">
+      <h1>Compliance &amp; ESG</h1>
+      <div class="sub">Routing outcomes, data-wipe attestation, and held devices — for corporate/compliance-driven customers</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-card"><div class="lbl">Diverted from Landfill</div><div class="val">96.8%</div></div>
+      <div class="stat-card"><div class="lbl">Certified Erasures (30d)</div><div class="val">1,198</div></div>
+      <div class="stat-card"><div class="lbl">Devices On Hold</div><div class="val">14</div></div>
+      <div class="stat-card"><div class="lbl">Est. e-Waste Diverted</div><div class="val">312 kg</div></div>
+    </div>
+
+    <div class="content-row">
+      <div class="card">
+        <div class="card-title">Routing Outcomes (Last 30 Days)</div>
+        <div class="routing-row"><span class="routing-dot" style="background:var(--success);"></span><span class="routing-label">Resale</span><div class="routing-bar-track"><div class="routing-bar-fill" style="width:71%; background:var(--success);"></div></div><span class="routing-pct">71%</span></div>
+        <div class="routing-row"><span class="routing-dot" style="background:var(--accent);"></span><span class="routing-label">Repair</span><div class="routing-bar-track"><div class="routing-bar-fill" style="width:18%; background:var(--accent);"></div></div><span class="routing-pct">18%</span></div>
+        <div class="routing-row"><span class="routing-dot" style="background:var(--purple);"></span><span class="routing-label">Parts Harvest</span><div class="routing-bar-track"><div class="routing-bar-fill" style="width:8%; background:var(--purple);"></div></div><span class="routing-pct">8%</span></div>
+        <div class="routing-row"><span class="routing-dot" style="background:var(--warn);"></span><span class="routing-label">Recycle</span><div class="routing-bar-track"><div class="routing-bar-fill" style="width:2%; background:var(--warn);"></div></div><span class="routing-pct">2%</span></div>
+        <div class="routing-row"><span class="routing-dot" style="background:var(--fail);"></span><span class="routing-label">On Hold</span><div class="routing-bar-track"><div class="routing-bar-fill" style="width:1%; background:var(--fail);"></div></div><span class="routing-pct">1%</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Data Erasure Compliance</div>
+        <div class="wipe-summary">
+          <svg class="wipe-ring" viewBox="0 0 76 76">
+            <circle cx="38" cy="38" r="32" fill="none" stroke="#f0f0f2" stroke-width="8"/>
+            <circle cx="38" cy="38" r="32" fill="none" stroke="#34c759" stroke-width="8" stroke-dasharray="201" stroke-dashoffset="8" stroke-linecap="round" transform="rotate(-90 38 38)"/>
+            <text x="38" y="43" text-anchor="middle" font-size="17" font-weight="700" font-family="Inter, sans-serif">96%</text>
+          </svg>
+          <div class="wipe-detail">
+            <b>1,198</b> of 1,247 processed devices this month have a<br>certified erasure record.<br>
+            <b>34</b> pending sync (offline capture, awaiting upload).<br>
+            <b>15</b> require manual review.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">Devices On Hold — Ineligible</div>
+      <table>
+        <tr><th>Device</th><th>Serial</th><th>Reason</th><th>Held Since</th><th>Report</th></tr>
+        <tr>
+          <td>iPhone 12</td>
+          <td style="font-family:monospace; font-size:11px;">DQW3812MXP</td>
+          <td><span class="reason-badge">Blacklisted</span></td>
+          <td>Aug 1, 2026</td>
+          <td style="color:var(--accent); font-weight:600;">DDA-0209</td>
+        </tr>
+        <tr>
+          <td>Galaxy S23</td>
+          <td style="font-family:monospace; font-size:11px;">R48KX02219A</td>
+          <td><span class="reason-badge">Activation Lock</span></td>
+          <td>Jul 31, 2026</td>
+          <td style="color:var(--accent); font-weight:600;">DDA-0198</td>
+        </tr>
+        <tr>
+          <td>iPhone 14 Plus</td>
+          <td style="font-family:monospace; font-size:11px;">FQ22NLM881</td>
+          <td><span class="reason-badge">Outstanding Balance</span></td>
+          <td>Jul 29, 2026</td>
+          <td style="color:var(--accent); font-weight:600;">DDA-0181</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>
