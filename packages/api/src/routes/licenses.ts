@@ -161,11 +161,28 @@ router.post("/:licenseId/consume-seat", requireAuth, requireTenantScope, async (
     return res.status(409).json({ error: checkResult.reason });
   }
 
+  // Ceiling enforced in the same atomic query, not just the checkLicense()
+  // read above — otherwise two concurrent calls can both pass the read-
+  // based check and both increment, landing over seatLimit. Mirrors
+  // release-seat's activeSeats: { gt: 0 } floor guard below.
   const result = await prisma.license.updateMany({
-    where: { ...tenantWhere(req), licenseId: req.params.licenseId },
+    where: {
+      ...tenantWhere(req),
+      licenseId: req.params.licenseId,
+      ...(license.seatLimit != null ? { activeSeats: { lt: license.seatLimit } } : {}),
+    },
     data: { activeSeats: { increment: 1 } },
   });
-  if (result.count === 0) return res.status(404).json({ error: "License not found" });
+  if (result.count === 0) {
+    // Distinguish "no longer exists for this tenant" from "hit the seat
+    // ceiling between the read above and this write" with a fresh read,
+    // rather than trusting the now-stale `license` fetched earlier.
+    const current = await prisma.license.findFirst({
+      where: { ...tenantWhere(req), licenseId: req.params.licenseId },
+    });
+    if (!current) return res.status(404).json({ error: "License not found" });
+    return res.status(409).json({ error: "All technician seats are in use. Add a seat or wait for one to free up." });
+  }
 
   const updated = await prisma.license.findFirst({
     where: { ...tenantWhere(req), licenseId: req.params.licenseId },
@@ -202,13 +219,19 @@ router.post("/:licenseId/release-seat", requireAuth, requireTenantScope, async (
     where: { ...tenantWhere(req), licenseId: req.params.licenseId, activeSeats: { gt: 0 } },
     data: { activeSeats: { decrement: 1 } },
   });
-  if (result.count === 0 && license.activeSeats > 0) {
-    return res.status(404).json({ error: "License not found" });
-  }
 
   const updated = await prisma.license.findFirst({
     where: { ...tenantWhere(req), licenseId: req.params.licenseId },
   });
+
+  if (result.count === 0) {
+    // count === 0 means either "no longer exists for this tenant" or
+    // "already at floor" — re-check current state (not the now-stale
+    // `license` fetched before the write) rather than guessing from a
+    // pre-read that a concurrent call may have already invalidated.
+    if (!updated) return res.status(404).json({ error: "License not found" });
+    return res.json(updated); // already at 0 — legitimate no-op, not an error
+  }
 
   await prisma.activityLogEntry.create({
     data: buildActivityLogData({
