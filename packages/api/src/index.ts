@@ -13,6 +13,7 @@ import tenantsRoutes from "./routes/tenants";
 import profilesRoutes from "./routes/profiles";
 import licensesRoutes from "./routes/licenses";
 import techniciansRoutes from "./routes/technicians";
+import activityLogRoutes from "./routes/activityLog";
 
 dotenv.config();
 
@@ -28,9 +29,12 @@ app.use("/tenants", tenantsRoutes);
 app.use("/profiles", profilesRoutes);
 app.use("/licenses", licensesRoutes);
 app.use("/technicians", techniciansRoutes);
+app.use("/activity-log", activityLogRoutes);
 
-// TODO (Sprint 2): disputes, activity-log routes — follow the pattern in
-// routes/reports.ts for every tenant-scoped resource.
+// TODO (Sprint 2+): dispute routes — the Dispute model exists in
+// schema.prisma but resolution actions aren't wired to backend logic
+// yet (admin_portal_disputes.html buttons are still mockup-only per
+// CLAUDE.md "Admin activity log" section).
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
