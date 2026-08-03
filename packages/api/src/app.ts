@@ -32,6 +32,10 @@ import profilesRoutes from "./routes/profiles";
 import licensesRoutes from "./routes/licenses";
 import techniciansRoutes from "./routes/technicians";
 import activityLogRoutes from "./routes/activityLog";
+import reportArtifactsRoutes from "./routes/reportArtifacts";
+import disputesRoutes from "./routes/disputes";
+import warrantyClaimsRoutes from "./routes/warrantyClaims";
+import invoicesRoutes from "./routes/invoices";
 
 export function createApp() {
   const app = express();
@@ -45,16 +49,17 @@ export function createApp() {
 
   app.use("/auth", authRoutes);
   app.use("/reports", reportsRoutes);
+  // Sub-resources of a report (revisions, wipe certificates). Mounted on
+  // the same prefix; they resolve the parent report tenant-scoped first.
+  app.use("/reports", reportArtifactsRoutes);
   app.use("/tenants", tenantsRoutes);
   app.use("/profiles", profilesRoutes);
   app.use("/licenses", licensesRoutes);
   app.use("/technicians", techniciansRoutes);
   app.use("/activity-log", activityLogRoutes);
-
-  // TODO (Sprint 2+): dispute routes — the Dispute model exists in
-  // schema.prisma but resolution actions aren't wired to backend logic
-  // yet (admin_portal_disputes.html buttons are still mockup-only per
-  // CLAUDE.md "Admin activity log" section).
+  app.use("/disputes", disputesRoutes);
+  app.use("/warranty-claims", warrantyClaimsRoutes);
+  app.use("/invoices", invoicesRoutes);
 
   // Catch-all error handler. Must be registered AFTER all routes, and must
   // take four arguments — that arity is how Express identifies it.

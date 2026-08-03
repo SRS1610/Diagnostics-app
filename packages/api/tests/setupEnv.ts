@@ -14,6 +14,11 @@ process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-only-secret-not-used-ou
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://diagnostics:diagnostics_dev@localhost:5432/diagnostics_test";
 
+// These tests drive far more logins from one address than a real
+// technician ever would. Raised here only; production keeps the default.
+process.env.BADGE_LOGIN_RATE_LIMIT = process.env.BADGE_LOGIN_RATE_LIMIT ?? "100000";
+process.env.PIN_LOOKUP_RATE_LIMIT = process.env.PIN_LOOKUP_RATE_LIMIT ?? "100000";
+
 if (!/_test(\?|$)/.test(process.env.DATABASE_URL)) {
   throw new Error(
     `Refusing to run tests against "${process.env.DATABASE_URL}" — the database name must end in _test, ` +

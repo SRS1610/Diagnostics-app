@@ -47,7 +47,9 @@ const VALID_TEST_IDS = new Set(TEST_CATALOG.map((t) => t.testId));
 // printed on the same profile QR poster this lookup is resolving).
 const pinLookupRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  // See the note on badgeLoginRateLimit in routes/technicians.ts: the
+  // default is the production value, so an unset env var is secure.
+  limit: Number(process.env.PIN_LOOKUP_RATE_LIMIT ?? 20),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many lookup attempts. Try again later." },

@@ -45,7 +45,11 @@ const prisma = new PrismaClient();
 // tenant's technician roster with no throttling.
 const badgeLoginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  // Configurable so the test suite, which drives many logins from one
+  // address, isn't throttled by a control aimed at real brute-forcing.
+  // The default is the production value — an unset env var yields the
+  // secure behaviour, never the permissive one.
+  limit: Number(process.env.BADGE_LOGIN_RATE_LIMIT ?? 20),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many login attempts. Try again later." },
