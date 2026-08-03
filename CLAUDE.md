@@ -590,6 +590,21 @@ already facility-access-controlled, so this is about attribution (redo
 history, dispute resolution notes, QA/accuracy metrics), not security.
 New mobile screen: Step 1, before PIN entry, session-level not per-device.
 
+**RESOLVED — tenant context at Step 1 (post-multi-tenancy gap):**
+`technicianAuth.ts` predated the multi-tenant migration and was missed
+when `customerProfile.ts` got its `tenantId` + `tenantId:pin` QR payload.
+Since `badgeCode` is only unique WITHIN a tenant (not globally), a
+Step-1 badge login by code alone is ambiguous across tenants — the same
+problem already solved for profile PINs. Fixed the same way: `Technician`
+now carries `tenantId`, and badge cards are printed with a QR encoding
+`tenantId:badgeCode` together (`generateTechnicianBadgePayload`/
+`parseTechnicianBadgePayload`, mirroring
+`generateProfileQrPayload`/`parseProfileQrPayload` exactly). This keeps
+Technician Login as Step 1 — before the profile QR scan — since the
+badge scan itself now carries tenant context, rather than needing to
+reorder the flow. Manual badge-code entry (the fallback, for a missing/
+damaged badge) needs a tenant picker first, same as manual PIN entry.
+
 ## Previously open decisions — now resolved
 Four decisions were flagged throughout this build as needing real input
 rather than a guessed default. Resolved as follows:

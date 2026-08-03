@@ -8,27 +8,28 @@
 // unique per-tenant (schema.prisma's @@unique([tenantId, badgeCode])),
 // same PIN-scoping pattern as CustomerProfile.
 //
-// NOTE on /login: technicianAuth.ts's shared loginTechnician(badgeCode)
-// takes no tenantId — but the schema (correctly, per CLAUDE.md's
-// multi-tenant model) only guarantees badgeCode uniqueness WITHIN a
-// tenant, not globally. A badge-login lookup by code alone could match
-// the wrong tenant's technician. This route requires tenantId in the
-// body to disambiguate, same as customerProfile.ts's PIN resolution
-// (parseProfileQrPayload/resolveProfileByPin encode tenantId alongside
-// the PIN for the same reason). CLAUDE.md's mobile flow lists
-// "Technician Login" as Step 1, before the profile QR scan that would
-// otherwise establish tenant context — reconciling how the mobile app
-// obtains a tenantId before Step 1 (e.g. a per-tenant login URL/QR
-// distinct from the profile QR, or reordering the flow) is a real open
-// question for Sprint 3 (mobile scaffold), not resolved here. This is
-// also NOT behind requireAuth: CLAUDE.md is explicit that badge login is
-// about attribution, not security (the tablet itself is already
-// facility-access-controlled) — it establishes a Technician identity for
-// a mobile session, not a portal session.
+// RESOLVED — tenant context at mobile Step 1: badgeCode is only unique
+// WITHIN a tenant, so a bare badgeCode lookup at /login is ambiguous
+// across tenants — the same problem customerProfile.ts already solved
+// for PINs. Fixed the same way: technicianAuth.ts's
+// generateTechnicianBadgePayload/parseTechnicianBadgePayload encode
+// tenantId:badgeCode together in a printed badge QR (GET
+// /:technicianId/badge-payload below generates it, mirroring
+// GET /profiles/:profileId/qr), so scanning a technician's own badge at
+// Step 1 carries tenant context with it — no need to reorder the mobile
+// flow or wait for the Step 2 profile scan. Manual badge-code entry (the
+// fallback, badge missing/damaged) needs a tenant picker first, same as
+// manual PIN entry.
+//
+// /login is NOT behind requireAuth/requireTenantScope: CLAUDE.md is
+// explicit that badge login is about attribution, not security (the
+// tablet itself is already facility-access-controlled) — it establishes
+// a Technician identity for a mobile session, not a portal session.
 
 import { Router } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
 import rateLimit from "express-rate-limit";
+import { generateTechnicianBadgePayload } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 
@@ -63,6 +64,14 @@ router.get("/:technicianId", requireAuth, requireTenantScope, async (req, res) =
   });
   if (!technician) return res.status(404).json({ error: "Technician not found" });
   res.json(technician);
+});
+
+router.get("/:technicianId/badge-payload", requireAuth, requireTenantScope, async (req, res) => {
+  const technician = await prisma.technician.findFirst({
+    where: { ...tenantWhere(req), technicianId: req.params.technicianId },
+  });
+  if (!technician) return res.status(404).json({ error: "Technician not found" });
+  res.json({ payload: generateTechnicianBadgePayload(technician) });
 });
 
 router.post("/", requireAuth, requireTenantScope, async (req, res) => {
