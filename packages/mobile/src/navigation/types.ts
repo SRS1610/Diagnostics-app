@@ -23,7 +23,7 @@ export type RootStackParamList = {
   ReviewDamage: undefined;
   Results: undefined;
   YourOffer: undefined;
-  Complete: undefined;
+  Complete: { reportId: string } | undefined;
 };
 
 export const SCREEN_ORDER: (keyof RootStackParamList)[] = [

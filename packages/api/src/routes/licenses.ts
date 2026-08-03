@@ -82,17 +82,47 @@ const tenantLicenseCheckRateLimit = rateLimit({
 
 router.get("/tenants/:tenantId/check", tenantLicenseCheckRateLimit, async (req, res) => {
   const { tenantId } = req.params;
-  // "Current" license = the most recently started active one. Schema
-  // allows historical License rows per tenant (status expired/suspended
-  // etc.), so this can't be a plain findFirst without a status filter.
-  const license = await prisma.license.findFirst({
+
+  // OPEN QUESTION — a tenant with several concurrently-active licenses
+  // has no defined governing license, and nothing currently stops that
+  // state existing (provisionLicense doesn't deactivate a previous one,
+  // and the schema permits many active rows per tenant).
+  //
+  // This was found by an end-to-end run, not in theory: a tenant with
+  // one exhausted per_inspection licence and one active seat licence
+  // was evaluated against whichever row sorted first, so an
+  // out-of-credit organisation could be waved through. Ordering by
+  // billingPeriodStart alone is not even stable — those dates tie
+  // routinely, since licences tend to start on the 1st.
+  //
+  // Made deterministic here (stable tie-break on licenseId) so the
+  // behaviour is at least predictable and reproducible, but determinism
+  // is not correctness. The real fix is a product decision that should
+  // not be guessed at:
+  //   - should provisioning deactivate any existing active licence, so
+  //     "one active licence per tenant" becomes an invariant? (likely,
+  //     and it would make this whole question disappear), or
+  //   - if concurrent licences are legitimate, which governs — the most
+  //     restrictive, the most recently provisioned, or the one matching
+  //     the work being attempted?
+  // Until that is settled, the count is logged so the ambiguity is
+  // visible rather than silent.
+  const activeLicenses = await prisma.license.findMany({
     where: { tenantId, status: "active" },
-    orderBy: { billingPeriodStart: "desc" },
+    orderBy: [{ billingPeriodStart: "desc" }, { licenseId: "asc" }],
   });
-  if (!license) {
+
+  if (activeLicenses.length === 0) {
     return res.json({ allowed: false, reason: "No active license found for this organization." });
   }
-  res.json(checkLicense(toSharedLicense(license)));
+  if (activeLicenses.length > 1) {
+    console.warn(
+      `Tenant ${tenantId} has ${activeLicenses.length} concurrently-active licenses; ` +
+        `evaluating against ${activeLicenses[0].licenseId}. See the note in routes/licenses.ts.`,
+    );
+  }
+
+  res.json(checkLicense(toSharedLicense(activeLicenses[0])));
 });
 
 router.get("/", requireAuth, requireTenantScope, async (req, res) => {
