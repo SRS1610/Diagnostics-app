@@ -81,7 +81,7 @@ export async function verifyDevice(imei: string): Promise<DeviceVerificationResu
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ imei }),
   });
-  return response.json();
+  return response.json() as Promise<DeviceVerificationResult>;
 }
 
 export interface EligibilityResult {

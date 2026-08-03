@@ -5,7 +5,11 @@
 // See CLAUDE.md "PDF report rendering" section for how this fits into the
 // overall app.
 
-import RNHTMLtoPDF from "react-native-html-to-pdf";
+// Type-only import: react-native-html-to-pdf is a native RN module, not
+// installed in Node contexts (packages/api). Loaded lazily at runtime
+// below so importing this file — or the @diagnostics/shared barrel —
+// doesn't require the package to be present outside the mobile app.
+import type RNHTMLtoPDFType from "react-native-html-to-pdf";
 import QRCode from "qrcode";
 import { AuditReport, DiagnosticResult } from "./types";
 import { DataWipeCertificate } from "./dataWipe";
@@ -174,11 +178,15 @@ export async function renderAuditReportPdf(
     qrCodeDataUri,
   });
 
+  const RNHTMLtoPDF: typeof RNHTMLtoPDFType = require("react-native-html-to-pdf").default;
   const { filePath } = await RNHTMLtoPDF.convert({
     html,
     fileName: `audit-report-${report.reportId}`,
     base64: false,
   });
+  if (!filePath) {
+    throw new Error("PDF generation failed — react-native-html-to-pdf returned no filePath");
+  }
 
   return filePath;
 }

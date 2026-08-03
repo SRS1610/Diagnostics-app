@@ -117,7 +117,7 @@ export function releaseSeat(license: License): License {
 }
 
 export function getLicenseForTenant(tenant: Tenant): Promise<License> {
-  return fetch(`${process.env.LICENSE_API_BASE}/licenses/by-tenant/${tenant.tenantId}`).then((r) => r.json());
+  return fetch(`${process.env.LICENSE_API_BASE}/licenses/by-tenant/${tenant.tenantId}`).then((r) => r.json() as Promise<License>);
 }
 
 /**

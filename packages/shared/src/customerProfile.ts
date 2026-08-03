@@ -122,7 +122,7 @@ export function parseProfileQrPayload(payload: string): { tenantId: string; pin:
 export async function resolveProfileByPin(tenantId: string, pin: string): Promise<CustomerProfile | null> {
   const response = await fetch(`${process.env.PROFILE_API_BASE}/tenants/${tenantId}/profiles/by-pin/${pin}`);
   if (response.status === 404) return null;
-  return response.json();
+  return response.json() as Promise<CustomerProfile>;
 }
 
 export function getEnabledTests(profile: CustomerProfile): TestCatalogEntry[] {

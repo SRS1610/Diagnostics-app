@@ -59,8 +59,8 @@ async function runDamageDetectionModel(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ imageUri, angle }),
   });
-  const data = await response.json();
-  return data.detections as DamageDetection[];
+  const data = (await response.json()) as { detections: DamageDetection[] };
+  return data.detections;
 }
 
 export async function captureAndInspect(

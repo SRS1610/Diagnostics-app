@@ -31,7 +31,7 @@ export async function login(email: string, password: string): Promise<PortalSess
     body: JSON.stringify({ email, password }),
   });
   if (!response.ok) return null;
-  const user: PortalUser = await response.json();
+  const user = (await response.json()) as PortalUser;
 
   logActivity({
     tenantId: user.tenantId,

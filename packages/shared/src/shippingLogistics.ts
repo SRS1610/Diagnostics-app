@@ -39,7 +39,7 @@ export async function createInboundLabel(orderId: string): Promise<InboundShipme
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ orderId }),
   });
-  return response.json();
+  return response.json() as Promise<InboundShipment>;
 }
 
 /**

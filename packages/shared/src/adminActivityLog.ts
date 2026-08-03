@@ -106,5 +106,5 @@ export async function queryActivityLog(query: ActivityLogQuery): Promise<Activit
   if (query.toDate) params.set("to", query.toDate);
   if (query.limit) params.set("limit", String(query.limit));
   const response = await fetch(`${process.env.ACTIVITY_LOG_API_BASE}/logs?${params}`);
-  return response.json();
+  return response.json() as Promise<ActivityLogEntry[]>;
 }

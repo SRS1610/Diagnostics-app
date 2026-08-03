@@ -26,7 +26,7 @@ export async function loginTechnician(badgeCode: string): Promise<Technician | n
     body: JSON.stringify({ badgeCode }),
   });
   if (response.status === 404) return null;
-  return response.json();
+  return response.json() as Promise<Technician>;
 }
 
 /**

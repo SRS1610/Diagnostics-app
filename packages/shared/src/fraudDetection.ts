@@ -63,7 +63,7 @@ export async function checkComponentAuthenticity(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ imageUri, component }),
   });
-  return response.json();
+  return response.json() as Promise<ComponentAuthenticityCheck>;
 }
 
 /**
