@@ -83,46 +83,24 @@ const tenantLicenseCheckRateLimit = rateLimit({
 router.get("/tenants/:tenantId/check", tenantLicenseCheckRateLimit, async (req, res) => {
   const { tenantId } = req.params;
 
-  // OPEN QUESTION — a tenant with several concurrently-active licenses
-  // has no defined governing license, and nothing currently stops that
-  // state existing (provisionLicense doesn't deactivate a previous one,
-  // and the schema permits many active rows per tenant).
+  // Exactly one active license per tenant is now a database invariant
+  // (partial unique index, migration 20260803140000), so "the tenant's
+  // license" is unambiguous and this needs no tie-breaking.
   //
-  // This was found by an end-to-end run, not in theory: a tenant with
-  // one exhausted per_inspection licence and one active seat licence
-  // was evaluated against whichever row sorted first, so an
-  // out-of-credit organisation could be waved through. Ordering by
-  // billingPeriodStart alone is not even stable — those dates tie
-  // routinely, since licences tend to start on the 1st.
-  //
-  // Made deterministic here (stable tie-break on licenseId) so the
-  // behaviour is at least predictable and reproducible, but determinism
-  // is not correctness. The real fix is a product decision that should
-  // not be guessed at:
-  //   - should provisioning deactivate any existing active licence, so
-  //     "one active licence per tenant" becomes an invariant? (likely,
-  //     and it would make this whole question disappear), or
-  //   - if concurrent licences are legitimate, which governs — the most
-  //     restrictive, the most recently provisioned, or the one matching
-  //     the work being attempted?
-  // Until that is settled, the count is logged so the ambiguity is
-  // visible rather than silent.
-  const activeLicenses = await prisma.license.findMany({
-    where: { tenantId, status: "active" },
-    orderBy: [{ billingPeriodStart: "desc" }, { licenseId: "asc" }],
-  });
+  // Previously it wasn't: a tenant could accumulate several active
+  // licenses and this check ordered by billingPeriodStart, which ties
+  // routinely because billing periods start on the 1st. An organisation
+  // out of metered credits could be evaluated against a different
+  // active license and allowed to run unpaid work. Provisioning now
+  // supersedes rather than accumulates, and the index stops any other
+  // path recreating the state.
+  const license = await prisma.license.findFirst({ where: { tenantId, status: "active" } });
 
-  if (activeLicenses.length === 0) {
+  if (!license) {
     return res.json({ allowed: false, reason: "No active license found for this organization." });
   }
-  if (activeLicenses.length > 1) {
-    console.warn(
-      `Tenant ${tenantId} has ${activeLicenses.length} concurrently-active licenses; ` +
-        `evaluating against ${activeLicenses[0].licenseId}. See the note in routes/licenses.ts.`,
-    );
-  }
 
-  res.json(checkLicense(toSharedLicense(activeLicenses[0])));
+  res.json(checkLicense(toSharedLicense(license)));
 });
 
 router.get("/", requireAuth, requireTenantScope, async (req, res) => {
@@ -165,19 +143,51 @@ router.post("/", requireAuth, requireTenantScope, async (req, res) => {
     return res.status(400).json({ error: "billingPeriodStart and billingPeriodEnd are required" });
   }
 
-  const license = await prisma.license.create({
-    data: {
-      ...tenantWhere(req),
-      type,
-      status: "active",
-      billingPeriodStart: new Date(billingPeriodStart),
-      billingPeriodEnd: new Date(billingPeriodEnd),
-      includedQuota: includedQuota ?? null,
-      usageThisPeriod: 0,
-      overageRatePerInspection: overageRatePerInspection ?? null,
-      seatLimit: seatLimit ?? null,
-      activeSeats: 0,
-    },
+  // Provisioning SUPERSEDES any existing active license rather than
+  // adding alongside it. Without this, a tenant accumulated several
+  // "active" licenses and the session gate had no defined way to pick
+  // between them — an organisation out of metered credits could be
+  // evaluated against a different active license and let through.
+  //
+  // Both statements run in one transaction: a partial unique index
+  // (migration 20260803140000) now enforces one active license per
+  // tenant at the database level, so creating before expiring would
+  // fail outright, and expiring without creating would leave the tenant
+  // unlicensed mid-shift.
+  const license = await prisma.$transaction(async (tx) => {
+    const superseded = await tx.license.updateMany({
+      where: { ...tenantWhere(req), status: "active" },
+      data: { status: "expired" },
+    });
+
+    if (superseded.count > 0) {
+      await tx.activityLogEntry.create({
+        data: buildActivityLogData({
+          tenantId: req.portalSession!.viewingTenantId,
+          actorUserId: req.portalSession!.userId,
+          actorRole: req.portalSession!.role,
+          action: "license_expired",
+          targetType: "license",
+          targetId: req.portalSession!.viewingTenantId ?? "unknown",
+          details: `Superseded ${superseded.count} active license(s) on provisioning a new ${type} license`,
+        }),
+      });
+    }
+
+    return tx.license.create({
+      data: {
+        ...tenantWhere(req),
+        type,
+        status: "active",
+        billingPeriodStart: new Date(billingPeriodStart),
+        billingPeriodEnd: new Date(billingPeriodEnd),
+        includedQuota: includedQuota ?? null,
+        usageThisPeriod: 0,
+        overageRatePerInspection: overageRatePerInspection ?? null,
+        seatLimit: seatLimit ?? null,
+        activeSeats: 0,
+      },
+    });
   });
 
   await prisma.activityLogEntry.create({
