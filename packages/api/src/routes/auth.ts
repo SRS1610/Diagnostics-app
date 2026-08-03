@@ -31,7 +31,7 @@ router.post("/login", async (req, res) => {
                                           // master_admin lands with null (Master Console)
 
   const token = jwt.sign(
-    { userId: user.userId, role: user.role, tenantId: user.tenantId, viewingTenantId },
+    { kind: "portal", userId: user.userId, role: user.role, tenantId: user.tenantId, viewingTenantId },
     JWT_SECRET,
     { expiresIn: "12h" }
   );
@@ -73,7 +73,7 @@ router.post("/enter-tenant-view", requireAuth, requireMasterAdmin, async (req, r
 
   // Issue a new token scoped to this tenant view
   const token = jwt.sign(
-    { userId: req.portalSession!.userId, role: "master_admin", tenantId: null, viewingTenantId: tenantId },
+    { kind: "portal", userId: req.portalSession!.userId, role: "master_admin", tenantId: null, viewingTenantId: tenantId },
     JWT_SECRET,
     { expiresIn: "12h" }
   );
@@ -101,7 +101,7 @@ router.post("/exit-tenant-view", requireAuth, requireMasterAdmin, async (req, re
   });
 
   const token = jwt.sign(
-    { userId: req.portalSession!.userId, role: "master_admin", tenantId: null, viewingTenantId: null },
+    { kind: "portal", userId: req.portalSession!.userId, role: "master_admin", tenantId: null, viewingTenantId: null },
     JWT_SECRET,
     { expiresIn: "12h" }
   );

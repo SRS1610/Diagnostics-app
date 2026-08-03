@@ -21,15 +21,31 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = authHeader.slice("Bearer ".length);
   try {
     const decoded = jwt.verify(token, JWT_SECRET as string) as {
-      userId: string;
-      role: "master_admin" | "tenant_admin" | "tenant_staff";
-      tenantId: string | null;
-      viewingTenantId: string | null;
+      userId?: string;
+      role?: "master_admin" | "tenant_admin" | "tenant_staff";
+      tenantId?: string | null;
+      viewingTenantId?: string | null;
+      kind?: string;
     };
+
+    // Portal and technician tokens share one signing secret, so a
+    // technician token verifies perfectly well here. Without this check
+    // it would populate a portalSession with an undefined role and
+    // viewingTenantId — which happened to fail closed downstream, but
+    // only by luck: requireTenantScope rejected it for "no tenant
+    // context" rather than "wrong kind of token", and any future portal
+    // route using requireAuth WITHOUT requireTenantScope would have
+    // received a session with no identity at all. This mirrors the
+    // check already in requireTechnicianAuth; the guard needs to exist
+    // in both directions, not one.
+    if (decoded.kind !== "portal" || !decoded.userId || !decoded.role) {
+      return res.status(401).json({ error: "Not a portal session token" });
+    }
+
     req.portalSession = {
       userId: decoded.userId,
       role: decoded.role,
-      viewingTenantId: decoded.viewingTenantId,
+      viewingTenantId: decoded.viewingTenantId ?? null,
     };
     next();
   } catch {
