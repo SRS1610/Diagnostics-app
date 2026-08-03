@@ -1,8 +1,15 @@
 // src/routes/profiles.ts
 //
-// CustomerProfile CRUD — tenant-scoped, following the exact pattern in
-// routes/reports.ts (requireAuth + requireTenantScope + tenantWhere on
-// every query). A profile's PIN only needs to be unique WITHIN a tenant
+// CustomerProfile CRUD — tenant-scoped, following the requireAuth +
+// requireTenantScope + tenantWhere pattern in routes/reports.ts for
+// reads and create. PATCH/DELETE use updateMany/deleteMany with the
+// tenant + id filter combined in the write itself (rather than a plain
+// update/delete keyed on profileId alone after a separate findFirst
+// check) — Prisma's WhereUniqueInput for update/delete-by-id can't take
+// a compound non-unique filter, so updateMany/deleteMany's plain where
+// is the correct equivalent that keeps the tenant scope enforced by the
+// query, not by an external invariant. A profile's PIN only needs to be
+// unique WITHIN a tenant
 // (see CLAUDE.md "Multi-tenant architecture" / customerProfile.ts) — the
 // DB enforces this via @@unique([tenantId, pin]) in schema.prisma, and
 // POST/PATCH below turn a violation into a friendly 409 rather than a
@@ -119,7 +126,7 @@ router.patch("/:profileId", requireAuth, requireTenantScope, async (req, res) =>
   if (!existing) return res.status(404).json({ error: "Profile not found" });
 
   const { customerName, pin, enabledTestIds } = req.body;
-  const data: Prisma.CustomerProfileUpdateInput = {};
+  const data: Prisma.CustomerProfileUpdateManyMutationInput = {};
 
   if (customerName !== undefined) data.customerName = customerName;
   if (pin !== undefined) {
@@ -134,23 +141,26 @@ router.patch("/:profileId", requireAuth, requireTenantScope, async (req, res) =>
     data.enabledTestIds = validatedTestIds;
   }
 
-  let updated;
   try {
-    // tenantId + profileId combined in the same query the update targets,
-    // via the findFirst 404 check above — Prisma's update-by-id doesn't
-    // accept a compound where here, so re-checking existence first (and
-    // updating only by the now-verified-owned profileId) is the correct
-    // equivalent for a non-unique compound key update.
-    updated = await prisma.customerProfile.update({
-      where: { profileId: existing.profileId },
+    // updateMany's where accepts the combined tenant + id filter directly
+    // (unlike update's WhereUniqueInput) — the tenant check lives in the
+    // write itself, not just in a preceding findFirst, so this stays safe
+    // even if a future feature ever reassigns a profile's tenantId.
+    const result = await prisma.customerProfile.updateMany({
+      where: { ...tenantWhere(req), profileId: req.params.profileId },
       data,
     });
+    if (result.count === 0) return res.status(404).json({ error: "Profile not found" });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return res.status(409).json({ error: "PIN already in use for this tenant" });
     }
     throw e;
   }
+
+  const updated = await prisma.customerProfile.findFirst({
+    where: { ...tenantWhere(req), profileId: req.params.profileId },
+  });
 
   await prisma.activityLogEntry.create({
     data: buildActivityLogData({
@@ -159,8 +169,8 @@ router.patch("/:profileId", requireAuth, requireTenantScope, async (req, res) =>
       actorRole: req.portalSession!.role,
       action: "profile_updated",
       targetType: "profile",
-      targetId: updated.profileId,
-      details: `Updated profile "${updated.customerName}"`,
+      targetId: updated!.profileId,
+      details: `Updated profile "${updated!.customerName}"`,
     }),
   });
 
@@ -173,7 +183,12 @@ router.delete("/:profileId", requireAuth, requireTenantScope, async (req, res) =
   });
   if (!existing) return res.status(404).json({ error: "Profile not found" });
 
-  await prisma.customerProfile.delete({ where: { profileId: existing.profileId } });
+  // Combined tenant + id filter in the delete itself, not just the
+  // preceding findFirst — see the note on PATCH above.
+  const result = await prisma.customerProfile.deleteMany({
+    where: { ...tenantWhere(req), profileId: req.params.profileId },
+  });
+  if (result.count === 0) return res.status(404).json({ error: "Profile not found" });
 
   await prisma.activityLogEntry.create({
     data: buildActivityLogData({
