@@ -22,6 +22,9 @@ export type RunKind =
   | "manual_entry"
   /** Fully automated — the app queries the OS and decides. */
   | "auto"
+  /** Guided multi-angle photo capture with a technician-assigned grade
+   *  (own screen — see CosmeticScanScreen). */
+  | "cosmetic"
   /** Recognised, but not implementable without work called out in
    *  CLAUDE.md that hasn't happened yet. Surfaced honestly rather than
    *  silently passing or failing. */
@@ -189,6 +192,20 @@ export const RUN_CATALOG: CatalogEntry[] = [
     prompt: "Enter the device colour as observed.",
   },
 
+  // --- Cosmetic grading --------------------------------------------
+  // Six-angle guided capture plus a technician-assigned grade. The
+  // hosted damage-detection model (COSMETIC_INFERENCE_ENDPOINT) does not
+  // exist yet — Sprint 7 — so no grade is suggested; see
+  // lib/cosmeticCapture.ts for why a suggestion would be misleading
+  // rather than merely absent.
+  {
+    testId: "cosmetic_grading",
+    label: "Cosmetic Grading",
+    component: "Housing & Cosmetics",
+    kind: "cosmetic",
+    prompt: "Photograph all six angles, then assign a condition grade.",
+  },
+
   // --- Not yet implementable ---------------------------------------
   {
     testId: "microphone",
@@ -198,14 +215,7 @@ export const RUN_CATALOG: CatalogEntry[] = [
     unavailableReason:
       "Needs audio capture to compare a silent baseline against a spoken sample. No audio-recording dependency is installed, and adding one requires sign-off per CLAUDE.md.",
   },
-  {
-    testId: "cosmetic_grading",
-    label: "Cosmetic Grading (AI-assisted)",
-    component: "Housing & Cosmetics",
-    kind: "unavailable",
-    unavailableReason:
-      "Needs the hosted damage-detection endpoint (COSMETIC_INFERENCE_ENDPOINT), which does not exist yet — model training is Sprint 7 work.",
-  },
+
 ];
 
 const BY_ID = new Map(RUN_CATALOG.map((entry) => [entry.testId, entry]));

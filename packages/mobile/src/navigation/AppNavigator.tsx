@@ -12,6 +12,7 @@ import { FindYourIdScreen } from '../screens/FindYourIdScreen';
 import { ConfirmScreen } from '../screens/ConfirmScreen';
 import { ChecklistScreen } from '../screens/ChecklistScreen';
 import { RunTestScreen } from '../screens/RunTestScreen';
+import { CosmeticScanScreen } from '../screens/CosmeticScanScreen';
 import { ResultsScreen } from '../screens/ResultsScreen';
 import { CompleteScreen } from '../screens/CompleteScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
@@ -26,6 +27,7 @@ const BUILT_SCREENS: Partial<Record<keyof RootStackParamList, React.ComponentTyp
   Confirm: ConfirmScreen,
   Checklist: ChecklistScreen,
   RunTest: RunTestScreen,
+  CosmeticScan: CosmeticScanScreen,
   Results: ResultsScreen,
   Complete: CompleteScreen,
 };

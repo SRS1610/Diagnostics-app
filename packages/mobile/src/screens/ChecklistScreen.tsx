@@ -56,7 +56,11 @@ export function ChecklistScreen({ navigation }: Props) {
           <TouchableOpacity
             key={entry.testId}
             style={styles.row}
-            onPress={() => navigation.navigate('RunTest', { testId: entry.testId })}
+            onPress={() =>
+              entry.kind === 'cosmetic'
+                ? navigation.navigate('CosmeticScan')
+                : navigation.navigate('RunTest', { testId: entry.testId })
+            }
           >
             <View
               style={[
