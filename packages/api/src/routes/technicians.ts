@@ -149,6 +149,12 @@ router.post("/login", badgeLoginRateLimit, async (req, res) => {
 
   const technician = await prisma.technician.findFirst({
     where: { tenantId, badgeCode },
+    // DO NOT WIDEN THIS SELECT. This route is unauthenticated (rate
+    // limiting is its only gate), so every Tenant field named here
+    // crosses a trust boundary. companyName is deliberate (see below);
+    // status and primaryContactEmail are business-sensitive and must not
+    // be exposed. Changing `select` to `true`, or adding fields, needs a
+    // re-review of what an unauthenticated caller should see.
     include: { tenant: { select: { companyName: true } } },
   });
   if (!technician) return res.status(404).json({ error: "Badge code not recognized for this tenant" });
