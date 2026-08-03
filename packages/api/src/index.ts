@@ -12,6 +12,7 @@ import reportsRoutes from "./routes/reports";
 import tenantsRoutes from "./routes/tenants";
 import profilesRoutes from "./routes/profiles";
 import licensesRoutes from "./routes/licenses";
+import techniciansRoutes from "./routes/technicians";
 
 dotenv.config();
 
@@ -26,9 +27,10 @@ app.use("/reports", reportsRoutes);
 app.use("/tenants", tenantsRoutes);
 app.use("/profiles", profilesRoutes);
 app.use("/licenses", licensesRoutes);
+app.use("/technicians", techniciansRoutes);
 
-// TODO (Sprint 2): technicians, disputes, activity-log routes — follow
-// the pattern in routes/reports.ts for every tenant-scoped resource.
+// TODO (Sprint 2): disputes, activity-log routes — follow the pattern in
+// routes/reports.ts for every tenant-scoped resource.
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
