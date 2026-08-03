@@ -21,14 +21,24 @@
 
 import React, { useCallback, useRef } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import type { CodeType } from 'react-native-vision-camera';
 import { Camera, useCameraDevice, useCameraPermission, useCodeScanner } from 'react-native-vision-camera';
+
+// Profile and badge QRs are 'qr'. Device labels are different: the
+// barcode on a SIM tray, retail box, or the *#06# screen is typically a
+// linear code, so identity capture has to scan those types too. Scanning
+// only what a given step expects also stops one step silently accepting
+// a code meant for another.
+export const QR_ONLY: CodeType[] = ['qr'];
+export const DEVICE_LABEL_CODES: CodeType[] = ['qr', 'code-128', 'code-39', 'code-93', 'ean-13', 'itf', 'data-matrix'];
 
 interface QrScannerViewProps {
   onScanned: (value: string) => void;
   active: boolean;
+  codeTypes?: CodeType[];
 }
 
-export function QrScannerView({ onScanned, active }: QrScannerViewProps) {
+export function QrScannerView({ onScanned, active, codeTypes = QR_ONLY }: QrScannerViewProps) {
   const device = useCameraDevice('back');
   const { hasPermission, requestPermission } = useCameraPermission();
   // Guards against the scanner firing onScanned repeatedly for the same
@@ -38,7 +48,7 @@ export function QrScannerView({ onScanned, active }: QrScannerViewProps) {
   const hasScannedRef = useRef(false);
 
   const codeScanner = useCodeScanner({
-    codeTypes: ['qr'],
+    codeTypes,
     onCodeScanned: (codes) => {
       if (hasScannedRef.current || !active) return;
       const value = codes[0]?.value;

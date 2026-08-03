@@ -8,6 +8,8 @@ import { SCREEN_ORDER } from './types';
 import { TechnicianLoginScreen } from '../screens/TechnicianLoginScreen';
 import { ScanProfileScreen } from '../screens/ScanProfileScreen';
 import { LicenseCheckScreen } from '../screens/LicenseCheckScreen';
+import { FindYourIdScreen } from '../screens/FindYourIdScreen';
+import { ConfirmScreen } from '../screens/ConfirmScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -16,6 +18,8 @@ const BUILT_SCREENS: Partial<Record<keyof RootStackParamList, React.ComponentTyp
   TechnicianLogin: TechnicianLoginScreen,
   ScanProfile: ScanProfileScreen,
   LicenseCheck: LicenseCheckScreen,
+  FindYourId: FindYourIdScreen,
+  Confirm: ConfirmScreen,
 };
 
 export function AppNavigator() {

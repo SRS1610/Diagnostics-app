@@ -6,17 +6,22 @@
 
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import type { CustomerProfile, LicenseCheckResult, Technician } from '../api/client';
+import type { CapturedIdentity } from '../lib/deviceIdentity';
 
 interface SessionState {
   technician: Technician | null;
   profile: CustomerProfile | null;
   licenseCheck: LicenseCheckResult | null;
+  /** Set on the Find Your ID screen, confirmed/edited on Confirm, then
+   *  locked for the rest of the session. */
+  device: Partial<CapturedIdentity> | null;
 }
 
 interface SessionContextValue extends SessionState {
   setTechnician: (technician: Technician) => void;
   setProfile: (profile: CustomerProfile) => void;
   setLicenseCheck: (result: LicenseCheckResult) => void;
+  setDevice: (device: Partial<CapturedIdentity>) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -25,10 +30,20 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [technician, setTechnician] = useState<Technician | null>(null);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [licenseCheck, setLicenseCheck] = useState<LicenseCheckResult | null>(null);
+  const [device, setDevice] = useState<Partial<CapturedIdentity> | null>(null);
 
   const value = useMemo(
-    () => ({ technician, profile, licenseCheck, setTechnician, setProfile, setLicenseCheck }),
-    [technician, profile, licenseCheck],
+    () => ({
+      technician,
+      profile,
+      licenseCheck,
+      device,
+      setTechnician,
+      setProfile,
+      setLicenseCheck,
+      setDevice,
+    }),
+    [technician, profile, licenseCheck, device],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

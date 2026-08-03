@@ -13,6 +13,21 @@ export interface Technician {
   tenantId: string;
   displayName: string;
   companyName: string;
+  /** Session token for authenticated writes (report creation). The
+   *  tenant a report lands in is derived from THIS, not from anything
+   *  the app sends in a request body — see the API's
+   *  middleware/technicianAuth.ts. */
+  token: string;
+}
+
+export interface DiagnosticResultInput {
+  testId: string;
+  label: string;
+  status: 'pass' | 'fail' | 'warning' | 'skipped';
+  value?: string | number;
+  notes?: string;
+  source: 'api' | 'manual' | 'ocr';
+  timestamp: string;
 }
 
 export interface CustomerProfile {
@@ -69,6 +84,41 @@ export async function checkTenantLicense(tenantId: string): Promise<LicenseCheck
   const response = await fetch(`${API_BASE_URL}/licenses/tenants/${encodeURIComponent(tenantId)}/check`);
   if (!response.ok) throw new ApiError(await parseErrorMessage(response), response.status);
   return response.json() as Promise<LicenseCheckResult>;
+}
+
+export interface CreateReportInput {
+  device: {
+    make: string;
+    model: string;
+    serialNumber: string;
+    imei: string;
+    imei2?: string;
+    captureSource: 'barcode' | 'ocr' | 'manual';
+  };
+  results: DiagnosticResultInput[];
+  profileId?: string;
+  routing?: string;
+}
+
+export interface CreatedReport {
+  reportId: string;
+  tenantId: string;
+  overallStatus: 'pass' | 'fail' | 'pass_with_warnings';
+}
+
+/**
+ * The only authenticated write the app makes. Note there is no tenantId
+ * parameter by design — the server takes it from the session token, so
+ * the app cannot write into the wrong tenant even if it wanted to.
+ */
+export async function createReport(token: string, input: CreateReportInput): Promise<CreatedReport> {
+  const response = await fetch(`${API_BASE_URL}/reports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new ApiError(await parseErrorMessage(response), response.status);
+  return response.json() as Promise<CreatedReport>;
 }
 
 export { ApiError };

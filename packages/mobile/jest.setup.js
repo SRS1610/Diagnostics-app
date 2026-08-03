@@ -21,3 +21,14 @@ jest.mock('react-native-fs', () => ({
   writeFile: jest.fn().mockResolvedValue(undefined),
   unlink: jest.fn().mockResolvedValue(undefined),
 }));
+
+// Native module; its real import also constructs a NativeEventEmitter at
+// load time, which throws outside a native runtime.
+jest.mock('react-native-device-info', () => ({
+  getBrand: jest.fn().mockReturnValue('TestBrand'),
+  getModel: jest.fn().mockReturnValue('TestModel'),
+}));
+
+jest.mock('@react-native-ml-kit/text-recognition', () => ({
+  recognize: jest.fn().mockResolvedValue({ text: '', blocks: [] }),
+}));
