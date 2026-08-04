@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:e2e": "node e2e/smoke.mjs && node e2e/failure-modes.mjs && node e2e/write-flows.mjs",
+    "test:e2e": "node e2e/smoke.mjs && node e2e/failure-modes.mjs && node e2e/write-flows.mjs && node e2e/user-management.mjs",
     "test:e2e:smoke": "node e2e/smoke.mjs",
     "test:e2e:failures": "node e2e/failure-modes.mjs",
     "e2e:install": "playwright install chromium",

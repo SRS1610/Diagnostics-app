@@ -105,6 +105,17 @@ model PortalUser {
   email        String   @unique
   passwordHash String
   role         String // master_admin | tenant_admin | tenant_staff
+  displayName  String?
+  // Revocation. A portal JWT is valid for its full 12 hours no matter
+  // what, so requireAuth re-reads this on every request — without it
+  // there was no way to cut off a portal user at all, since there was
+  // also no way to delete one.
+  active       Boolean  @default(true)
+  // Set when an admin provisions or resets an account. The temporary
+  // password works exactly once, for the purpose of choosing a real one.
+  mustChangePassword Boolean @default(false)
+  passwordChangedAt  DateTime?
+  lastLoginAt        DateTime?
   tenantId     String? // null ONLY for master_admin
   // Restrict, because null here MEANS master_admin. Under the Prisma
   // default (SetNull), deleting a tenant would blank this on its
@@ -113,7 +124,28 @@ model PortalUser {
   tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
   createdAt    DateTime @default(now())
 
+  passwordResets PasswordResetToken[]
+
   @@map("portal_users")
+}
+
+/// A one-time password reset.
+///
+/// Only the HASH of the token is stored: the database is not a place to
+/// keep something that grants account access, and a leaked dump should
+/// not hand over live reset links. The plaintext is returned exactly
+/// once, at creation, to whoever requested it.
+model PasswordResetToken {
+  tokenId   String    @id @default(cuid())
+  userId    String
+  user      PortalUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // ============================================================

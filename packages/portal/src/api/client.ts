@@ -93,7 +93,27 @@ export type PortalRole = "master_admin" | "tenant_admin" | "tenant_staff";
 
 export interface LoginResponse {
   token: string;
-  user: { userId: string; email: string; role: PortalRole; tenantId: string | null };
+  user: {
+    userId: string;
+    email: string;
+    role: PortalRole;
+    tenantId: string | null;
+    /** Set when an admin provisioned or reset this account. The portal
+     *  routes straight to the password screen until it is cleared. */
+    mustChangePassword?: boolean;
+  };
+}
+
+export interface PortalUser {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  role: PortalRole;
+  tenantId: string | null;
+  active: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
 }
 
 export interface Tenant {

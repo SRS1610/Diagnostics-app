@@ -6,13 +6,16 @@
 
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET env var is required — see .env.example");
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing or malformed Authorization header" });
@@ -42,10 +45,37 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ error: "Not a portal session token" });
     }
 
+    // REVOCATION. Everything above proves the token was validly signed
+    // and has not expired — nothing more. Without this lookup, a portal
+    // session survived deactivation and deletion for its full 12 hours,
+    // and since there was no user management at all there was no way to
+    // cut anyone off. Deactivating an account has to mean something on
+    // the next request, not at some point within half a day.
+    //
+    // The ROLE is re-read too, rather than trusted from the token: a
+    // demotion from tenant_admin to tenant_staff must take effect
+    // immediately, or the demoted user keeps admin powers until their
+    // token expires.
+    const user = await prisma.portalUser.findUnique({
+      where: { userId: decoded.userId },
+      select: { userId: true, role: true, tenantId: true, active: true },
+    });
+    if (!user || !user.active) {
+      return res.status(401).json({ error: "This session is no longer valid. Sign in again." });
+    }
+
+    // A tenant user's scope comes from their OWN record, never from the
+    // token, so it cannot be widened by a stale or tampered claim. Only
+    // a master_admin has a viewingTenantId that legitimately differs
+    // from their own tenantId, because entering a tenant view is what
+    // that role does.
+    const viewingTenantId =
+      user.role === "master_admin" ? (decoded.viewingTenantId ?? null) : user.tenantId;
+
     req.portalSession = {
-      userId: decoded.userId,
-      role: decoded.role,
-      viewingTenantId: decoded.viewingTenantId ?? null,
+      userId: user.userId,
+      role: user.role as "master_admin" | "tenant_admin" | "tenant_staff",
+      viewingTenantId,
     };
     next();
   } catch {

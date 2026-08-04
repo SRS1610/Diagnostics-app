@@ -7,6 +7,7 @@ import { useState } from "react";
 import { api, type ActivityLogEntry, type License, type Technician } from "../api/client";
 import { useSession } from "../auth/SessionContext";
 import { AsyncBoundary, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
+import { UsersSection } from "./Users";
 
 // ============================================================
 // Billing & Licenses — admin_portal_billing.html
@@ -262,6 +263,12 @@ export function TeamPage() {
         next request, and their badge no longer signs in. Their inspection history keeps their name on it, which is why
         this replaces deleting them.
       </p>
+
+      {/* Portal users and technicians are deliberately separate
+          identities — one signs into this portal, the other into the
+          tablet — but both are "who works here", so they belong on one
+          page rather than sending an admin hunting. */}
+      <UsersSection />
 
       <p className="page-sub">
         QA metrics (redo rate, dispute rate per technician) are part of this page in the design but need aggregate

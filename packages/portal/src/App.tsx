@@ -24,10 +24,15 @@ import { DeviceHistoryPage, DevicesPage } from "./pages/Devices";
 import { ProfilesPage } from "./pages/Profiles";
 import { DisputesPage } from "./pages/Disputes";
 import { ActivityLogPage, BillingPage, SettingsPage, TeamPage } from "./pages/Misc";
+import { ChangePasswordPage } from "./pages/ChangePassword";
 
 function TenantRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, viewingTenantId } = useSession();
+  const { isAuthenticated, viewingTenantId, mustChangePassword } = useSession();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  // A temporary password is one an administrator has seen, so the
+  // account is effectively shared until it is replaced. Nothing else in
+  // the portal is reachable first.
+  if (mustChangePassword) return <Navigate to="/change-password" replace />;
   // No tenant in scope — a master_admin who has not entered one. Every
   // tenant-scoped API call would 400, so send them to choose first.
   if (!viewingTenantId) return <Navigate to="/master" replace />;
@@ -35,24 +40,44 @@ function TenantRoute({ children }: { children: React.ReactNode }) {
 }
 
 function MasterRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, role } = useSession();
+  const { isAuthenticated, role, mustChangePassword } = useSession();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (mustChangePassword) return <Navigate to="/change-password" replace />;
   if (role !== "master_admin") return <Navigate to="/dashboard" replace />;
   return <MasterShell>{children}</MasterShell>;
 }
 
 export default function App() {
-  const { isAuthenticated, role, viewingTenantId } = useSession();
+  const { isAuthenticated, role, viewingTenantId, mustChangePassword } = useSession();
 
   const home = !isAuthenticated
     ? "/login"
-    : role === "master_admin" && !viewingTenantId
-      ? "/master"
-      : "/dashboard";
+    : mustChangePassword
+      ? "/change-password"
+      : role === "master_admin" && !viewingTenantId
+        ? "/master"
+        : "/dashboard";
 
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to={home} replace /> : <LoginPage />} />
+
+      {/* Reachable while mustChangePassword is set, unlike every other
+          page — it is the way out of that state. Rendered in whichever
+          shell suits the role so the user is not dropped somewhere
+          visually unrecognisable. */}
+      <Route
+        path="/change-password"
+        element={
+          !isAuthenticated ? (
+            <Navigate to="/login" replace />
+          ) : role === "master_admin" && !viewingTenantId ? (
+            <MasterShell><ChangePasswordPage /></MasterShell>
+          ) : (
+            <TenantShell><ChangePasswordPage /></TenantShell>
+          )
+        }
+      />
 
       <Route path="/master" element={<MasterRoute><MasterConsolePage /></MasterRoute>} />
 

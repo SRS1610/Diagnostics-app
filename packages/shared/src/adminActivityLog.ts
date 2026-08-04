@@ -12,6 +12,7 @@
 export type ActivityAction =
   // Portal auth
   | "portal_login"
+  | "portal_password_changed"
   | "portal_logout"
   | "entered_tenant_view"
   | "exited_tenant_view"
@@ -19,6 +20,11 @@ export type ActivityAction =
   | "tenant_created"
   | "tenant_suspended"
   | "tenant_activated"
+  // Portal users
+  | "user_created"
+  | "user_updated"
+  | "user_deleted"
+  | "user_password_reset"
   // Customer profiles
   | "profile_created"
   | "profile_updated"

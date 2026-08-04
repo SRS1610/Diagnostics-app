@@ -28,6 +28,9 @@ interface StoredSession {
    *  master_admin who has not entered a tenant view. */
   viewingTenantId: string | null;
   viewingTenantName: string | null;
+  /** True until the user replaces a password an admin issued. Routing
+   *  keeps them on the password screen while it is set. */
+  mustChangePassword: boolean;
 }
 
 interface SessionContextValue extends Partial<StoredSession> {
@@ -36,6 +39,7 @@ interface SessionContextValue extends Partial<StoredSession> {
   logout: () => void;
   enterTenantView: (tenantId: string, companyName: string) => Promise<void>;
   exitTenantView: () => Promise<void>;
+  clearMustChangePassword: () => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -85,6 +89,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // with no tenant in scope and must enter one explicitly.
       viewingTenantId: res.user.tenantId,
       viewingTenantName: null,
+      mustChangePassword: Boolean(res.user.mustChangePassword),
     });
     return res.user.role;
   }, []);
@@ -94,6 +99,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setSession((prev) =>
       prev ? { ...prev, token: res.token, viewingTenantId: res.viewingTenantId, viewingTenantName: companyName } : prev,
     );
+  }, []);
+
+  const clearMustChangePassword = useCallback(() => {
+    setSession((prev) => (prev ? { ...prev, mustChangePassword: false } : prev));
   }, []);
 
   const exitTenantView = useCallback(async () => {
@@ -109,8 +118,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       logout,
       enterTenantView,
       exitTenantView,
+      clearMustChangePassword,
+      mustChangePassword: Boolean(session?.mustChangePassword),
     }),
-    [session, login, logout, enterTenantView, exitTenantView],
+    [session, login, logout, enterTenantView, exitTenantView, clearMustChangePassword],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

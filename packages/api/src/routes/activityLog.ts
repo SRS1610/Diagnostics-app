@@ -30,6 +30,11 @@ const MAX_LIMIT = 200;
 const VALID_ACTIONS = new Set<ActivityAction>([
   "portal_login",
   "portal_logout",
+  "portal_password_changed",
+  "user_created",
+  "user_updated",
+  "user_deleted",
+  "user_password_reset",
   "entered_tenant_view",
   "exited_tenant_view",
   "tenant_created",

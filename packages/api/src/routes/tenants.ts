@@ -14,9 +14,11 @@
 // implementation in tenant.ts.
 
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { requireAuth, requireMasterConsole } from "../middleware/auth";
 import { buildActivityLogData } from "../lib/activityLog";
+import { generateTemporaryPassword } from "../lib/passwords";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -43,9 +45,41 @@ router.post("/", requireAuth, requireMasterConsole, async (req, res) => {
     return res.status(400).json({ error: "companyName and primaryContactEmail are required" });
   }
 
-  const tenant = await prisma.tenant.create({
-    data: { companyName, primaryContactEmail, status: "trial" },
-  });
+  // Provision the tenant AND its first admin together, in one
+  // transaction. Creating the tenant alone produced a company nobody
+  // could ever sign into — the only way in was a master_admin using
+  // enter-tenant-view, which is a support tool, not a customer's access.
+  // If the admin cannot be created (the address is already in use), the
+  // tenant must not exist either: a half-provisioned tenant is worse
+  // than a failed request.
+  const email = String(primaryContactEmail).trim().toLowerCase();
+  const temporaryPassword = generateTemporaryPassword();
+
+  let tenant;
+  try {
+    tenant = await prisma.$transaction(async (tx) => {
+      const created = await tx.tenant.create({
+        data: { companyName, primaryContactEmail: email, status: "trial" },
+      });
+      await tx.portalUser.create({
+        data: {
+          email,
+          passwordHash: await bcrypt.hash(temporaryPassword, 10),
+          role: "tenant_admin",
+          tenantId: created.tenantId,
+          mustChangePassword: true,
+        },
+      });
+      return created;
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return res.status(409).json({
+        error: `${email} already has a portal account. Use a different contact address for this tenant's first admin.`,
+      });
+    }
+    throw e;
+  }
 
   await prisma.activityLogEntry.create({
     data: buildActivityLogData({
@@ -59,7 +93,14 @@ router.post("/", requireAuth, requireMasterConsole, async (req, res) => {
     }),
   });
 
-  res.status(201).json(tenant);
+  res.status(201).json({
+    ...tenant,
+    adminEmail: email,
+    temporaryPassword,
+    note:
+      "Give this password to the tenant's administrator directly — it is shown once and must be changed at first " +
+      "sign-in. No email is sent; no email provider is integrated.",
+  });
 });
 
 router.patch("/:tenantId/suspend", requireAuth, requireMasterConsole, async (req, res) => {

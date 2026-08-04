@@ -40,6 +40,7 @@ import quotesRoutes from "./routes/quotes";
 import batchesRoutes from "./routes/batches";
 import listingsRoutes from "./routes/listings";
 import publicTrackerRoutes from "./routes/publicTracker";
+import usersRoutes from "./routes/users";
 
 export function createApp() {
   const app = express();
@@ -60,6 +61,7 @@ export function createApp() {
   app.use("/profiles", profilesRoutes);
   app.use("/licenses", licensesRoutes);
   app.use("/technicians", techniciansRoutes);
+  app.use("/users", usersRoutes);
   app.use("/activity-log", activityLogRoutes);
   app.use("/disputes", disputesRoutes);
   app.use("/warranty-claims", warrantyClaimsRoutes);
