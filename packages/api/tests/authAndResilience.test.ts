@@ -261,3 +261,70 @@ describe("regression: a revoked session must not take down the API", () => {
     expect((await request(app).get("/health")).status).toBe(200);
   });
 });
+
+// A JWT is valid until it expires no matter what happens to the account
+// behind it. These cover the two ways that mattered: removing a
+// technician from the roster (the only lever an admin has when a badge
+// is lost or someone leaves) and suspending a tenant.
+describe("technician session revocation", () => {
+  it("stops accepting writes once the technician is removed from the roster", async () => {
+    const token = await technicianLogin(app, fx.alpha.tenantId, fx.alpha.badgeCode);
+    // Works before removal, so the test proves revocation and not just
+    // that the request was broken to begin with.
+    expect((await request(app).post("/reports").set("Authorization", `Bearer ${token}`).send(validReportBody())).status)
+      .toBe(201);
+
+    await prisma.report.deleteMany({ where: { technicianId: fx.alpha.technicianId } });
+    await prisma.technician.delete({ where: { technicianId: fx.alpha.technicianId } });
+
+    const after = await request(app)
+      .post("/reports")
+      .set("Authorization", `Bearer ${token}`)
+      .send(validReportBody());
+    expect(after.status).toBe(401);
+    // And nothing was written on the way to rejecting it.
+    expect(await prisma.report.count({ where: { tenantId: fx.alpha.tenantId } })).toBe(0);
+  });
+
+  it("stops accepting writes while the tenant is suspended", async () => {
+    const token = await technicianLogin(app, fx.alpha.tenantId, fx.alpha.badgeCode);
+    await prisma.tenant.update({ where: { tenantId: fx.alpha.tenantId }, data: { status: "suspended" } });
+
+    const res = await request(app).post("/reports").set("Authorization", `Bearer ${token}`).send(validReportBody());
+    expect(res.status).toBe(403);
+
+    // Reinstating the tenant restores access — suspension is a hold, not
+    // a permanent revocation, and the technician should not have to be
+    // re-enrolled afterwards.
+    await prisma.tenant.update({ where: { tenantId: fx.alpha.tenantId }, data: { status: "active" } });
+    const restored = await request(app)
+      .post("/reports")
+      .set("Authorization", `Bearer ${token}`)
+      .send(validReportBody());
+    expect(restored.status).toBe(201);
+  });
+});
+
+describe("consumer token exposure", () => {
+  it("does not return consumer tokens in the reports list", async () => {
+    const token = await portalLogin(app, fx.alpha.adminEmail);
+    const res = await request(app).get("/reports").set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    for (const report of res.body) {
+      expect(report.consumerToken).toBeUndefined();
+    }
+    // The token must not survive anywhere in the payload under another
+    // name either.
+    const stored = await prisma.report.findUnique({ where: { reportId: fx.alpha.reportId } });
+    expect(JSON.stringify(res.body)).not.toContain(stored!.consumerToken);
+  });
+
+  it("returns the token on the detail route, where staff need it to hand over", async () => {
+    const token = await portalLogin(app, fx.alpha.adminEmail);
+    const res = await request(app).get(`/reports/${fx.alpha.reportId}`).set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.consumerToken).toBe("string");
+  });
+});

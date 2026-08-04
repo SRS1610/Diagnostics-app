@@ -50,6 +50,9 @@ export interface TrackerView {
     amount: number | null;
     basePrice: number | null;
     deductions: Deduction[];
+    /** How much of the deductions the zero floor absorbed. Non-zero
+     *  means the deductions came to more than the base price. */
+    deductionsCappedBy: number;
     currency: string;
     expiresAt: string;
     expired: boolean;

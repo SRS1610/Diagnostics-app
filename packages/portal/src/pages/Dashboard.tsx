@@ -2,7 +2,7 @@
 
 import { Link } from "react-router-dom";
 import { api, type Dispute, type Report } from "../api/client";
-import { AsyncBoundary, StatusBadge, formatDate, useApi } from "../components/common";
+import { AsyncBoundary, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
 
 export function DashboardPage() {
   const reports = useApi(() => api.get<Report[]>("/reports"));
@@ -17,27 +17,28 @@ export function DashboardPage() {
       <h1 className="page-title">Dashboard</h1>
       <p className="page-sub">Recent inspection activity</p>
 
+      {/* Each tile carries its own fetch's state. When a request fails
+          these read "—", not "0" — see StatCard. */}
       <div className="stat-grid">
-        <div className="card">
-          <div className="stat-num">{rows.length}</div>
-          <div className="stat-label">Reports (latest 50)</div>
-        </div>
-        <div className="card">
-          <div className="stat-num" style={{ color: "var(--success)" }}>{rows.length - flagged}</div>
-          <div className="stat-label">Clean</div>
-        </div>
-        <div className="card">
-          <div className="stat-num" style={{ color: "var(--warn)" }}>{flagged}</div>
-          <div className="stat-label">Flagged</div>
-        </div>
-        <div className="card">
-          {/* An open dispute holds the device and its payout, so it is a
-              queue that needs action, not a passive statistic. */}
-          <div className="stat-num" style={{ color: openDisputes.length ? "var(--fail)" : undefined }}>
-            {openDisputes.length}
-          </div>
-          <div className="stat-label">Disputes awaiting review</div>
-        </div>
+        <StatCard value={rows.length} label="Reports (latest 50)" loading={reports.loading} error={reports.error} />
+        <StatCard
+          value={rows.length - flagged}
+          label="Clean"
+          loading={reports.loading}
+          error={reports.error}
+          color="var(--success)"
+        />
+        <StatCard value={flagged} label="Flagged" loading={reports.loading} error={reports.error} color="var(--warn)" />
+        {/* An open dispute holds the device and its payout, so it is a
+            queue that needs action, not a passive statistic — which is
+            exactly why a failed fetch must not render here as zero. */}
+        <StatCard
+          value={openDisputes.length}
+          label="Disputes awaiting review"
+          loading={disputes.loading}
+          error={disputes.error}
+          color={openDisputes.length ? "var(--fail)" : undefined}
+        />
       </div>
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>

@@ -154,6 +154,8 @@ async function buildTrackerView(report: LoadedReport) {
   });
 
   const quote = report.quote;
+  const deductions = quote ? toDeductions(quote.deductions) : [];
+  const deductionTotal = deductions.reduce((sum, d) => sum + d.amount, 0);
   // A quote computed from the illustrative seed price table is not a
   // number anyone should be shown, let alone offered. The portal already
   // refuses to let one be accepted; showing it here would put a figure
@@ -203,7 +205,19 @@ async function buildTrackerView(report: LoadedReport) {
           // Safe to publish — each deduction's `reason` is a test LABEL
           // ("Battery Health"), never a technician's free-text note.
           basePrice: offerIsShowable ? quote.basePrice : null,
-          deductions: offerIsShowable ? toDeductions(quote.deductions) : [],
+          deductions: offerIsShowable ? deductions : [],
+          // An offer is floored at zero (computeTradeInQuote does
+          // Math.max(0, ...)), so on a heavily damaged device the
+          // deductions can exceed the base price. Without saying so, the
+          // breakdown shown to the customer does not add up — base 60,
+          // deductions 100, total 0 — and a customer checking the
+          // arithmetic at the moment they decide whether to accept money
+          // finds it wrong. Flagged so the UI can show the floor as its
+          // own line rather than silently swallowing the difference.
+          deductionsCappedBy:
+            offerIsShowable && deductionTotal > quote.basePrice
+              ? Math.round((deductionTotal - quote.basePrice) * 100) / 100
+              : 0,
           currency: quote.currency,
           expiresAt: quote.expiresAt,
           expired,

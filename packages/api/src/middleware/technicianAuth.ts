@@ -29,6 +29,9 @@
 
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -56,31 +59,56 @@ export function issueTechnicianToken(session: TechnicianSession): string {
   });
 }
 
-export function requireTechnicianAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireTechnicianAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing or malformed Authorization header" });
   }
 
+  let decoded: { technicianId?: string; tenantId?: string; kind?: string };
   try {
-    const decoded = jwt.verify(authHeader.slice("Bearer ".length), JWT_SECRET as string) as {
-      technicianId?: string;
-      tenantId?: string;
-      kind?: string;
-    };
-
-    // Reject a portal token presented here. Both token families are
-    // signed with the same secret, so without this check a portal JWT
-    // would verify fine and fall through with an undefined tenantId.
-    if (decoded.kind !== "technician" || !decoded.technicianId || !decoded.tenantId) {
-      return res.status(401).json({ error: "Not a technician session token" });
-    }
-
-    req.technicianSession = { technicianId: decoded.technicianId, tenantId: decoded.tenantId };
-    next();
+    decoded = jwt.verify(authHeader.slice("Bearer ".length), JWT_SECRET as string) as typeof decoded;
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
+
+  // Reject a portal token presented here. Both token families are
+  // signed with the same secret, so without this check a portal JWT
+  // would verify fine and fall through with an undefined tenantId.
+  if (decoded.kind !== "technician" || !decoded.technicianId || !decoded.tenantId) {
+    return res.status(401).json({ error: "Not a technician session token" });
+  }
+
+  // REVOCATION. A JWT stays cryptographically valid for its whole TTL,
+  // so without this lookup, removing a technician from the roster — the
+  // one action an admin has for cutting off access, and the thing they
+  // would do after a badge is lost or someone leaves — did nothing for
+  // up to 12 hours. The token kept writing reports into the tenant.
+  //
+  // The same applies to a suspended tenant: suspension is a billing and
+  // account-status decision, and a suspended account that keeps
+  // accepting inspections is not suspended.
+  //
+  // This costs one indexed lookup per authenticated mobile request. That
+  // is the price of being able to revoke at all; a token-only check is
+  // only cheaper because it doesn't do the job.
+  const technician = await prisma.technician.findFirst({
+    // tenantId from the token is included in the filter rather than
+    // trusted from it — if a technician were ever moved between tenants,
+    // the old token must stop working rather than keep its old scope.
+    where: { technicianId: decoded.technicianId, tenantId: decoded.tenantId },
+    select: { technicianId: true, tenant: { select: { status: true } } },
+  });
+
+  if (!technician) {
+    return res.status(401).json({ error: "This session is no longer valid. Log in again." });
+  }
+  if (technician.tenant.status === "suspended") {
+    return res.status(403).json({ error: "This account is suspended. Contact your administrator." });
+  }
+
+  req.technicianSession = { technicianId: decoded.technicianId, tenantId: decoded.tenantId };
+  next();
 }
 
 /**

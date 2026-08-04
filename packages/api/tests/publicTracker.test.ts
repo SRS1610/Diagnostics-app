@@ -207,6 +207,43 @@ describe("offer", () => {
     expect(second.status).toBe(409);
   });
 
+  it("shows a breakdown that adds up when deductions exceed the base price", async () => {
+    // A heavily damaged device: the offer is floored at zero, so without
+    // the floor being stated the customer sees 60 − 40 − 35 − 25 = 0 and
+    // the arithmetic on screen is visibly wrong.
+    await prisma.tradeInQuote.create({
+      data: {
+        tenantId: fx.alpha.tenantId,
+        reportId: fx.alpha.reportId,
+        deviceModel: "iPhone 13",
+        grade: "D",
+        basePrice: 60,
+        deductions: [
+          { reason: "Battery Health", amount: 40 },
+          { reason: "Rear Camera", amount: 35 },
+          { reason: "Loud Speaker", amount: 25 },
+        ],
+        finalOffer: 0,
+        expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+        priceSource: "tenant_price_list",
+      },
+    });
+
+    const { body } = await request(app).get(track(fx.alpha.consumerToken));
+    const offer = body.offer;
+    const deducted = offer.deductions.reduce((sum: number, d: { amount: number }) => sum + d.amount, 0);
+
+    expect(offer.deductionsCappedBy).toBe(40);
+    // The line items must reconcile to the total the customer is shown.
+    expect(offer.basePrice - deducted + offer.deductionsCappedBy).toBe(offer.amount);
+  });
+
+  it("reports no floor adjustment on an ordinary offer", async () => {
+    await giveQuote(fx.alpha.tenantId, fx.alpha.reportId);
+    const { body } = await request(app).get(track(fx.alpha.consumerToken));
+    expect(body.offer.deductionsCappedBy).toBe(0);
+  });
+
   it("refuses an expired offer", async () => {
     await giveQuote(fx.alpha.tenantId, fx.alpha.reportId, { expiresAt: new Date(Date.now() - 1000) });
     const res = await request(app).post(`${track(fx.alpha.consumerToken)}/offer/accept`);

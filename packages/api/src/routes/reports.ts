@@ -122,6 +122,30 @@ router.get("/", requireAuth, requireTenantScope, async (req, res) => {
     where: tenantWhere(req), // NEVER query without this — see tenantScope.ts
     orderBy: { generatedAt: "desc" },
     take: 50,
+    // Explicit field list, and consumerToken is deliberately not on it.
+    // Each token is a capability that lets its bearer act on a
+    // customer's offer; the list view has no use for them, and
+    // returning fifty in one response puts fifty live credentials into
+    // every dashboard load, browser cache and proxy log for no benefit.
+    // The detail route below returns the single one a member of staff
+    // actually needs to hand over.
+    select: {
+      reportId: true,
+      tenantId: true,
+      profileId: true,
+      technicianId: true,
+      generatedAt: true,
+      deviceMake: true,
+      deviceModel: true,
+      serialNumber: true,
+      imei: true,
+      imei2: true,
+      captureSource: true,
+      results: true,
+      overallStatus: true,
+      routing: true,
+      offerDeclinedAt: true,
+    },
   });
   res.json(reports);
 });
@@ -226,7 +250,32 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
         error: "Session is no longer valid — the technician or profile no longer exists. Log in again.",
       });
     }
-    throw e;
+    // P2002 on consumerToken. With 256 bits of CSPRNG output this should
+    // never happen, and that is exactly why it is worth handling rather
+    // than trusting: if it ever does fire, the cause is a broken entropy
+    // source, and losing a completed inspection to an unexplained 500
+    // would be the worst way to find out. One retry, then surface it.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      report = await prisma.report.create({
+        data: {
+          ...tenantFilter,
+          profileId: (profileId as string | undefined) ?? null,
+          technicianId: req.technicianSession!.technicianId,
+          deviceMake: make,
+          deviceModel: model,
+          serialNumber,
+          imei,
+          imei2: (imei2 as string | undefined) ?? null,
+          captureSource,
+          results: validated.value as unknown as object[],
+          overallStatus: computeOverallStatus(validated.value),
+          routing: (routing as string | undefined) ?? null,
+          consumerToken: mintConsumerToken(),
+        },
+      });
+    } else {
+      throw e;
+    }
   }
 
   // licensing.ts: "Call once per COMPLETED session (report generated),

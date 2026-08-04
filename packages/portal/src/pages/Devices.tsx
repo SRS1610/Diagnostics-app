@@ -16,7 +16,7 @@
 
 import { Link, useParams } from "react-router-dom";
 import { api, type Report } from "../api/client";
-import { AsyncBoundary, StatusBadge, formatDate, useApi } from "../components/common";
+import { AsyncBoundary, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
 
 function deviceKey(report: Report): string {
   return report.serialNumber?.trim() || report.imei;
@@ -56,14 +56,17 @@ export function DevicesPage() {
       <p className="page-sub">Inspections grouped by physical device</p>
 
       <div className="stat-grid">
-        <div className="card">
-          <div className="stat-num">{groups.length}</div>
-          <div className="stat-label">Distinct devices</div>
-        </div>
-        <div className="card">
-          <div className="stat-num" style={{ color: repeats.length ? "var(--warn)" : undefined }}>{repeats.length}</div>
-          <div className="stat-label">Seen more than once</div>
-        </div>
+        <StatCard value={groups.length} label="Distinct devices" loading={loading} error={error} />
+        {/* A repeat inspection is the signal a human is meant to act on,
+            so a failed fetch showing "0" here would suppress exactly the
+            thing this page exists to surface. */}
+        <StatCard
+          value={repeats.length}
+          label="Seen more than once"
+          loading={loading}
+          error={error}
+          color={repeats.length ? "var(--warn)" : undefined}
+        />
       </div>
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>

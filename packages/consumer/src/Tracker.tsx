@@ -216,6 +216,17 @@ export function Tracker() {
                       <span className="neg">−{formatMoney(d.amount, offer.currency)}</span>
                     </div>
                   ))}
+                  {/* An offer never goes below zero. When the deductions
+                      come to more than the base price, the floor is shown
+                      as its own line — otherwise these numbers visibly
+                      don't add up, and a customer checking the maths on
+                      the screen where they accept money finds it wrong. */}
+                  {offer.deductionsCappedBy > 0 && (
+                    <div className="offer-row">
+                      <span>Offer floor (an offer is never below zero)</span>
+                      <span>+{formatMoney(offer.deductionsCappedBy, offer.currency)}</span>
+                    </div>
+                  )}
                   <div className="offer-row total">
                     <span>Total offer</span>
                     <span>{formatMoney(offer.amount, offer.currency)}</span>

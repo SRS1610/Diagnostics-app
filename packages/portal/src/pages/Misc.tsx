@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { api, type ActivityLogEntry, type License, type Technician } from "../api/client";
 import { useSession } from "../auth/SessionContext";
-import { AsyncBoundary, StatusBadge, formatDate, useApi } from "../components/common";
+import { AsyncBoundary, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
 
 // ============================================================
 // Billing & Licenses — admin_portal_billing.html
@@ -30,26 +30,26 @@ export function BillingPage() {
         </div>
       </div>
 
-      {active && (
+      {/* Rendered whenever the fetch has resolved either way, so a
+          failure shows as "—" rather than the whole block vanishing —
+          a missing usage panel reads as "no licence", which is a
+          different and alarming claim. */}
+      {(active || error) && (
         <div className="stat-grid">
-          <div className="card">
-            <div className="stat-num" style={{ fontSize: 18 }}>{active.type.replace(/_/g, " ")}</div>
-            <div className="stat-label">Plan</div>
-          </div>
-          <div className="card">
-            <div className="stat-num">{active.usageThisPeriod}</div>
-            <div className="stat-label">Inspections this period</div>
-          </div>
-          <div className="card">
-            <div className="stat-num">{active.includedQuota ?? "—"}</div>
-            <div className="stat-label">Included quota</div>
-          </div>
-          <div className="card">
-            <div className="stat-num">
-              {active.seatLimit ? `${active.activeSeats}/${active.seatLimit}` : "—"}
-            </div>
-            <div className="stat-label">Seats in use</div>
-          </div>
+          <StatCard value={active ? active.type.replace(/_/g, " ") : "—"} label="Plan" loading={loading} error={error} />
+          <StatCard
+            value={active?.usageThisPeriod ?? "—"}
+            label="Inspections this period"
+            loading={loading}
+            error={error}
+          />
+          <StatCard value={active?.includedQuota ?? "—"} label="Included quota" loading={loading} error={error} />
+          <StatCard
+            value={active?.seatLimit ? `${active.activeSeats}/${active.seatLimit}` : "—"}
+            label="Seats in use"
+            loading={loading}
+            error={error}
+          />
         </div>
       )}
 
