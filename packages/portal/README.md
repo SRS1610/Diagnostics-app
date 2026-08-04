@@ -49,6 +49,20 @@ npm run test:e2e --workspace=packages/portal
   are made to fail, 401, and 500, and the checks assert the portal says
   so: no fabricated zeroes on stat tiles, no error rendered as an empty
   state, no blank screen on an expired session.
+- **`e2e/write-flows.mjs`** — the actions that CHANGE something, which
+  the other two never touch: creating a tenant, suspending and
+  reactivating it, creating a profile (and being refused a duplicate PIN
+  with a usable message), the QR payload carrying its tenant, deleting a
+  profile, provisioning a licence and confirming it supersedes rather
+  than accumulates, deactivating and reactivating a technician, and
+  resolving a dispute — which must stay unavailable until reasoning is
+  written.
+
+  Everything mutating runs inside a dedicated **E2E Sandbox** tenant it
+  creates on first run and reuses after, so a run cannot disturb real
+  data. Provisioning a licence supersedes whatever was active, which is
+  not something to do to a tenant you care about. The suite is safe to
+  run repeatedly against the same database.
 
 Run them against the **built bundle**, not `npm run dev`. That is what
 ships, and it is where the session bug appeared.
