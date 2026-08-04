@@ -564,8 +564,12 @@ wrong, and several things needed correcting as a result.
 ### Tenant indicator — now applied everywhere
 The tenant-indicator badge is now on every tenant-scoped portal page:
 Dashboard, Report Detail, Devices, Device History, Test Profiles,
-Compliance, Disputes, Billing & Licenses, Team, and Settings. This is
-still a VISUAL convention, not a real data guarantee — each page's
+Compliance, Disputes, Billing & Licenses, Team, Settings, Integrations,
+and every page added since (Batch Intake, Warranty, Invoices, Activity
+Log) — this is structural (`TenantShell` in `Shell.tsx` wraps every
+`TenantRoute`), not something added per page, so it stays true by
+construction rather than needing to be remembered on each addition.
+This is still a VISUAL convention, not a real data guarantee — each page's
 actual data-fetching logic still needs to filter by
 `session.viewingTenantId` server-side. The badge tells a human which
 tenant they're looking at; it doesn't stop the underlying query from
@@ -573,9 +577,10 @@ accidentally pulling another tenant's rows if that filter isn't wired
 in. Treat the badge as the UI half of this problem and the query-level
 scoping as the other, equally necessary half.
 
-Still not addressed: the admin activity log (who changed a profile,
-resolved a dispute, provisioned a license) — flagged twice now, still
-open.
+The admin activity log this note used to flag as still open (who
+changed a profile, resolved a dispute, provisioned a license) is now
+resolved — see "Admin activity log (RESOLVED — no longer pending)"
+below for the full integration map.
 
 ## Technician identity
 `technicianAuth.ts` — a lightweight login SEPARATE from the customer
@@ -685,14 +690,24 @@ same caveat pattern used for device verification/pricing earlier.
 
 ## Team & Settings pages
 - **Team** (`admin_portal_team.html`): technician roster, badge codes,
-  shift status, seat assignment, and QA metrics (redo rate, dispute
-  rate per technician) in one view — this is also where the previously-
-  missing QA/accuracy dashboard lives, rather than as a separate page.
-- **Settings** (`admin_portal_settings.html`): org config, the data
-  retention policy stated explicitly (forever, manual deletion only),
-  defaults (wipe standard, PIN length), and notification toggles shown
-  honestly as "not yet configured" since no SMS/email provider is wired
-  up yet.
+  shift status, and seat assignment, plus portal user management
+  (`Users.tsx`'s `UsersSection`) on the same page — deliberately
+  together, since both answer "who works here," just for the tablet vs.
+  the portal. **QA metrics (redo rate, dispute rate per technician) are
+  still NOT built** — the design calls for them here, but the aggregate
+  endpoints they'd need don't exist yet, and the page says so plainly
+  rather than showing invented figures on a screen used to judge
+  people's work.
+- **Settings** (`admin_portal_settings.html`): org config with real,
+  enforced persistence (`routes/orgSettings.ts` — see "Settings" in the
+  Redo/retest section's neighbors and `SettingsPage` in the portal), the
+  data retention policy stated explicitly (forever, manual deletion
+  only — see "Data retention policy" below for the still-open
+  right-to-deletion gap), defaults (wipe standard, PIN length), a
+  Security section for the signed-in user's own MFA, a Single sign-on
+  section for the tenant's OIDC connection, and notification toggles
+  shown honestly as "not yet configured" since no SMS/email provider is
+  wired up yet.
 
 ## Batch intake UI
 `mobile_batch_intake.html` — three screens (Start Batch, Scan Devices,
@@ -745,24 +760,39 @@ fully wired into every module that changes state:
   (fileWarrantyClaim now requires `tenantId` + `actorUserId`)
 - `marketPriceUpload.ts` → `pricing_uploaded` (new
   `logPricingUpload()` called after a successful parse)
+- `routes/disputes.ts` → `dispute_upheld` / `dispute_grade_adjusted` on
+  `POST /:disputeId/resolve`, depending on the admin's chosen outcome —
+  the queue and Uphold Grade/Adjust Grade actions described under
+  "Dispute / review flow" above are real, wired backend logic now, not
+  the HTML mockup buttons this section originally flagged
+- `routes/orgSettings.ts` → `settings_updated` on every `PATCH /settings`
+  save — Settings (`admin_portal_settings.html`) is real, enforced
+  persistence now, not a static mockup
+- `routes/profiles.ts` → `profile_created` / `profile_updated` /
+  `profile_deleted` — `customerProfile.ts`'s CRUD gap this section used
+  to flag has since been built and wired
 
-### Not yet wired (call sites exist but no logActivity call yet)
-- Dispute resolution (uphold/adjust grade) — the UI actions exist on
-  `admin_portal_disputes.html` but aren't connected to backend logic
-  at all yet (they're HTML mockup buttons, not wired functions)
-- Settings changes — `admin_portal_settings.html` is a static mockup;
-  when real settings persistence is built, each save should call
-  `logActivity()` with `action: "settings_updated"`
-- Profile creation/update — `customerProfile.ts` doesn't have
-  create/update functions beyond `resolveProfileByPin()`; when CRUD
-  endpoints are built, wire them to `profile_created`/`profile_updated`
+### Stage 6–8 additions (MFA, API keys, webhooks, SSO, billing)
+Built after the section above; same integration-map shape, added here
+rather than folded in to keep this list in commit order:
+- `routes/auth.ts` → `portal_mfa_enabled` / `portal_mfa_disabled` (MFA
+  enroll/disable), `sso_login` (SSO callback), `portal_login` (SSO and
+  password logins alike)
+- `routes/integrations.ts` → `api_key_created` / `api_key_revoked`,
+  `webhook_created`
+- `routes/sso.ts` → `sso_connection_configured` on create/edit
+- `routes/billing.ts` → `billing_checkout_completed`,
+  `billing_payment_failed`, `billing_payment_recovered`,
+  `billing_subscription_canceled` — all four logged with
+  `actorUserId: "stripe"` since Stripe's webhook, not a portal session,
+  is what triggers them
 
 ### Portal page
-`admin_portal_activity_log.html` — filterable by action type (Auth,
-Profiles, Licenses, Disputes, Reports, Pricing, Settings), showing
-actor, action badge, target, details, and timestamp. Tenant-scoped
-(shows the tenant indicator badge). Added to every portal page's
-sidebar navigation.
+`admin_portal_activity_log.html` — filterable by action type (Auth
+[now includes SSO login/config], Billing, Tenants, Profiles, Licences,
+Disputes, Reports, Warranty, Pricing, Settings), showing actor, action
+badge, target, details, and timestamp. Tenant-scoped (shows the tenant
+indicator badge). Added to every portal page's sidebar navigation.
 
 ## Testing
 - Unit tests: (fill in — e.g. Jest)
