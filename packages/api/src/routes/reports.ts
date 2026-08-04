@@ -20,12 +20,15 @@ import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { requireTechnicianAuth, technicianTenantWhere } from "../middleware/technicianAuth";
 import { mintConsumerToken } from "../lib/consumerToken";
+import { parseDate, parseListWindow, parseSearch, setPaginationHeaders } from "../lib/pagination";
 
 const router = Router();
 const prisma = new PrismaClient();
 
 const CAPTURE_SOURCES = new Set(["barcode", "ocr", "manual"]);
 const RESULT_STATUSES = new Set(["pass", "fail", "warning", "skipped"]);
+// The report-level rollup, as opposed to a single test's status above.
+const OVERALL_STATUSES = new Set(["pass", "fail", "pass_with_warnings"]);
 const RESULT_SOURCES = new Set(["api", "manual", "ocr"]);
 // Mirrors RoutingDecision in deviceRouting.ts. Validated like every
 // other enum on this route rather than accepting any string — a stored
@@ -117,36 +120,92 @@ function validateResults(results: unknown): { ok: true; value: DiagnosticResult[
 // Portal reads
 // ============================================================
 
+/**
+ * The reports list, which is the only view onto a tenant's inspection
+ * history and grows for as long as they keep working. It was capped at
+ * the 50 most recent with no way to reach anything older and no way to
+ * look anything up — fine for a demo, useless for a warehouse.
+ *
+ * Search covers the identifiers a person actually has in hand when they
+ * come looking: a serial number off a label, an IMEI from a customer, or
+ * just the model. Case-insensitive contains rather than exact match,
+ * because a half-remembered serial is the normal case.
+ */
 router.get("/", requireAuth, requireTenantScope, async (req, res) => {
-  const reports = await prisma.report.findMany({
-    where: tenantWhere(req), // NEVER query without this — see tenantScope.ts
-    orderBy: { generatedAt: "desc" },
-    take: 50,
-    // Explicit field list, and consumerToken is deliberately not on it.
-    // Each token is a capability that lets its bearer act on a
-    // customer's offer; the list view has no use for them, and
-    // returning fifty in one response puts fifty live credentials into
-    // every dashboard load, browser cache and proxy log for no benefit.
-    // The detail route below returns the single one a member of staff
-    // actually needs to hand over.
-    select: {
-      reportId: true,
-      tenantId: true,
-      profileId: true,
-      technicianId: true,
-      generatedAt: true,
-      deviceMake: true,
-      deviceModel: true,
-      serialNumber: true,
-      imei: true,
-      imei2: true,
-      captureSource: true,
-      results: true,
-      overallStatus: true,
-      routing: true,
-      offerDeclinedAt: true,
-    },
-  });
+  const { limit, offset } = parseListWindow(req);
+  const search = parseSearch(req.query.q);
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+
+  const where: Prisma.ReportWhereInput = { ...tenantWhere(req) };
+
+  if (search) {
+    where.OR = [
+      { serialNumber: { contains: search, mode: "insensitive" } },
+      { imei: { contains: search, mode: "insensitive" } },
+      { imei2: { contains: search, mode: "insensitive" } },
+      { deviceModel: { contains: search, mode: "insensitive" } },
+      { deviceMake: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  // Validated against the known set rather than passed through: an
+  // unrecognised status would silently match nothing, which reads as
+  // "this tenant has no failed inspections" — a false statement.
+  if (typeof req.query.status === "string" && req.query.status) {
+    if (!OVERALL_STATUSES.has(req.query.status)) {
+      return res.status(400).json({ error: `status must be one of: ${[...OVERALL_STATUSES].join(", ")}` });
+    }
+    where.overallStatus = req.query.status;
+  }
+  if (typeof req.query.routing === "string" && req.query.routing) {
+    if (!ROUTING_DECISIONS.has(req.query.routing)) {
+      return res.status(400).json({ error: `routing must be one of: ${[...ROUTING_DECISIONS].join(", ")}` });
+    }
+    where.routing = req.query.routing;
+  }
+  if (from || to) {
+    where.generatedAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
+  }
+
+  // Count and page in one round trip. The count is of everything
+  // MATCHING, not of the page, so the caller can tell whether there is
+  // more to fetch.
+  const [total, reports] = await Promise.all([
+    prisma.report.count({ where }),
+    prisma.report.findMany({
+      where,
+      orderBy: { generatedAt: "desc" },
+      take: limit,
+      skip: offset,
+      // Explicit field list, and consumerToken is deliberately not on it.
+      // Each token is a capability that lets its bearer act on a
+      // customer's offer; the list view has no use for them, and
+      // returning fifty in one response puts fifty live credentials into
+      // every dashboard load, browser cache and proxy log for no benefit.
+      // The detail route below returns the single one a member of staff
+      // actually needs to hand over.
+      select: {
+        reportId: true,
+        tenantId: true,
+        profileId: true,
+        technicianId: true,
+        generatedAt: true,
+        deviceMake: true,
+        deviceModel: true,
+        serialNumber: true,
+        imei: true,
+        imei2: true,
+        captureSource: true,
+        results: true,
+        overallStatus: true,
+        routing: true,
+        offerDeclinedAt: true,
+      },
+    }),
+  ]);
+
+  setPaginationHeaders(res, { total, limit, offset });
   res.json(reports);
 });
 

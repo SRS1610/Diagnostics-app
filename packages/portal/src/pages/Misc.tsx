@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { api, type ActivityLogEntry, type License, type Technician } from "../api/client";
 import { useSession } from "../auth/SessionContext";
-import { AsyncBoundary, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
+import { AsyncBoundary, Pager, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
 import { UsersSection } from "./Users";
 
 // ============================================================
@@ -302,13 +302,20 @@ const ACTION_FILTERS = [
   { label: "Settings", value: "settings_updated" },
 ];
 
+const LOG_PAGE_SIZE = 50;
+
 export function ActivityLogPage() {
   const [actions, setActions] = useState("");
+  const [offset, setOffset] = useState(0);
+
+  const params = new URLSearchParams({ limit: String(LOG_PAGE_SIZE), offset: String(offset) });
+  if (actions) params.set("actions", actions);
+
   const { data, loading, error } = useApi(
-    () => api.get<ActivityLogEntry[]>(`/activity-log${actions ? `?actions=${actions}` : ""}`),
-    [actions],
+    () => api.getPage<ActivityLogEntry>(`/activity-log?${params}`),
+    [actions, offset],
   );
-  const entries = data ?? [];
+  const entries = data?.items ?? [];
 
   return (
     <>
@@ -320,7 +327,13 @@ export function ActivityLogPage() {
           <button
             key={f.label}
             className={`btn btn-sm ${actions === f.value ? "" : "btn-secondary"}`}
-            onClick={() => setActions(f.value)}
+            onClick={() => {
+              // Back to the first page: an offset from the previous
+              // filter usually lands past the end of the new one, which
+              // looks like "no matching activity".
+              setOffset(0);
+              setActions(f.value);
+            }}
           >
             {f.label}
           </button>
@@ -357,6 +370,10 @@ export function ActivityLogPage() {
           </table>
         </AsyncBoundary>
       </div>
+
+      {data && !error && (
+        <Pager total={data.total} limit={data.limit} offset={data.offset} onOffset={setOffset} loading={loading} />
+      )}
     </>
   );
 }

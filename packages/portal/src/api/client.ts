@@ -42,6 +42,15 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;
 }
 
+/** A page of results plus the counts the API returns in headers. */
+export interface Page<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -74,8 +83,57 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/** Same request path, but hands back the headers too. */
+async function requestWithHeaders<T>(path: string, init: RequestInit = {}): Promise<{ body: T; headers: Headers }> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+      ...init.headers,
+    },
+  });
+
+  if (response.status === 401) {
+    onUnauthorized?.();
+    throw new ApiError("Your session has expired. Sign in again.", 401);
+  }
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  return { body: (await response.json()) as T, headers: response.headers };
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
+  /** A list request that also reads the pagination headers. Separate
+   *  from get() because most endpoints are small enough not to page, and
+   *  a caller that does not need counts should not have to unwrap them.
+   *  Falls back to the row count when the headers are absent, so an
+   *  un-paginated endpoint still works through this path. */
+  getPage: async <T>(path: string): Promise<Page<T>> => {
+    const { body, headers } = await requestWithHeaders<T[]>(path);
+    const num = (name: string, fallback: number) => {
+      const raw = headers.get(name);
+      const parsed = raw === null ? NaN : Number(raw);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    return {
+      items: body,
+      total: num("X-Total-Count", body.length),
+      limit: num("X-Limit", body.length),
+      offset: num("X-Offset", 0),
+      hasMore: headers.get("X-Has-More") === "true",
+    };
+  },
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
   patch: <T>(path: string, body?: unknown) =>

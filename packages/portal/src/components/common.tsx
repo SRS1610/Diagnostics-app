@@ -141,3 +141,68 @@ export function formatDate(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/**
+ * Paging controls.
+ *
+ * Shows the range and the total ("51–100 of 312") rather than a page
+ * number alone, because the useful question on an inspection list is
+ * "how much is there and have I seen it all", not "which page am I on".
+ * Renders nothing when everything fits on one page — controls that
+ * cannot do anything are just noise.
+ */
+export function Pager({
+  total,
+  limit,
+  offset,
+  onOffset,
+  loading,
+}: {
+  total: number;
+  limit: number;
+  offset: number;
+  onOffset: (next: number) => void;
+  loading?: boolean;
+}) {
+  if (total <= limit) return null;
+
+  const first = offset + 1;
+  const last = Math.min(offset + limit, total);
+  const atStart = offset === 0;
+  const atEnd = offset + limit >= total;
+
+  return (
+    <div className="row-between" style={{ marginTop: 12 }}>
+      <span className="muted" style={{ fontSize: 13 }}>
+        {first}–{last} of {total}
+      </span>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={atStart || loading}
+          onClick={() => onOffset(Math.max(0, offset - limit))}
+        >
+          Previous
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={atEnd || loading}
+          onClick={() => onOffset(offset + limit)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Debounces a value, so typing in a search box does not fire a request
+ *  per keystroke. */
+export function useDebounced<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}

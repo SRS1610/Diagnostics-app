@@ -9,14 +9,17 @@
 // silently merge unrelated devices into one history.
 //
 // The grouping happens client-side over the reports list because no
-// grouped endpoint exists. That is a real limit, not a design choice:
-// the list is capped at the API's most recent 50, so a device whose
-// earlier inspections fall outside that window will under-report its
-// history. Called out on the page rather than left to be discovered.
+// grouped endpoint exists. That is still a real limit, but a smaller one
+// than it was: the page now pulls the API's maximum window (200) and
+// exposes the same search the Reports page uses, so looking up a
+// specific device by serial works regardless of how far back it sits.
+// A tenant with more than 200 inspections still cannot see every device
+// at once, and the page says so rather than quietly implying it can.
 
 import { Link, useParams } from "react-router-dom";
 import { api, type Report } from "../api/client";
-import { AsyncBoundary, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
+import { useState } from "react";
+import { AsyncBoundary, Pager, StatCard, StatusBadge, formatDate, useApi, useDebounced } from "../components/common";
 
 function deviceKey(report: Report): string {
   return report.serialNumber?.trim() || report.imei;
@@ -45,18 +48,49 @@ function groupByDevice(reports: Report[]): DeviceGroup[] {
   return [...map.values()].sort((a, b) => b.reports.length - a.reports.length);
 }
 
+const WINDOW = 200; // the API's maximum page
+
 export function DevicesPage() {
-  const { data, loading, error } = useApi(() => api.get<Report[]>("/reports"));
-  const groups = groupByDevice(data ?? []);
-  const repeats = groups.filter((g) => g.reports.length > 1);
+  const [query, setQuery] = useState("");
+  const search = useDebounced(query.trim());
+  const [offset, setOffset] = useState(0);
+
+  const params = new URLSearchParams({ limit: String(WINDOW) });
+  if (search) params.set("q", search);
+
+  const { data, loading, error } = useApi(() => api.getPage<Report>(`/reports?${params}`), [search]);
+  const allGroups = groupByDevice(data?.items ?? []);
+  const repeats = allGroups.filter((g) => g.reports.length > 1);
+
+  // Grouping collapses many reports into fewer devices, so the device
+  // list is paged client-side over the groups rather than reusing the
+  // API's report-level offsets, which would not line up.
+  const groups = allGroups.slice(offset, offset + 25);
+  const truncated = (data?.total ?? 0) > WINDOW;
 
   return (
     <>
       <h1 className="page-title">Devices</h1>
       <p className="page-sub">Inspections grouped by physical device</p>
 
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="dsearch">Find a device</label>
+          <input
+            id="dsearch"
+            className="input"
+            placeholder="Serial number, IMEI, make or model"
+            value={query}
+            onChange={(e) => {
+              setOffset(0);
+              setQuery(e.target.value);
+            }}
+          />
+        </div>
+      </div>
+
       <div className="stat-grid">
-        <StatCard value={groups.length} label="Distinct devices" loading={loading} error={error} />
+        <StatCard value={allGroups.length} label="Distinct devices" loading={loading} error={error} />
         {/* A repeat inspection is the signal a human is meant to act on,
             so a failed fetch showing "0" here would suppress exactly the
             thing this page exists to surface. */}
@@ -105,20 +139,31 @@ export function DevicesPage() {
         </AsyncBoundary>
       </div>
 
-      <p className="page-sub" style={{ marginTop: 16 }}>
-        Grouping is computed from the 50 most recent reports. A device whose earlier inspections fall outside that
-        window will show a shorter history than it actually has — a grouped endpoint would be needed to fix that
-        properly.
-      </p>
+      <Pager total={allGroups.length} limit={25} offset={offset} onOffset={setOffset} loading={loading} />
+
+      {truncated && (
+        <p className="page-sub" style={{ marginTop: 16 }}>
+          Grouping is computed from the {WINDOW} most recent inspections, and this tenant has {data?.total}. A device
+          whose earlier inspections fall outside that window will show a shorter history than it actually has — search
+          by serial or IMEI to find it reliably. Fixing this properly needs a grouped endpoint on the API.
+        </p>
+      )}
     </>
   );
 }
 
 export function DeviceHistoryPage() {
   const { deviceKey: key } = useParams<{ deviceKey: string }>();
-  const { data, loading, error } = useApi(() => api.get<Report[]>("/reports"));
+  // The same wide window as the list, and narrowed by the device's own
+  // identifier so its history is found even in a busy tenant — a plain
+  // most-recent-50 fetch would show an empty history for any device not
+  // inspected recently.
+  const { data, loading, error } = useApi(
+    () => api.getPage<Report>(`/reports?limit=200&q=${encodeURIComponent(key ?? "")}`),
+    [key],
+  );
 
-  const group = groupByDevice(data ?? []).find((g) => g.key === key);
+  const group = groupByDevice(data?.items ?? []).find((g) => g.key === key);
 
   return (
     <AsyncBoundary loading={loading} error={error}>

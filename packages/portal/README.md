@@ -49,6 +49,11 @@ npm run test:e2e --workspace=packages/portal
   are made to fail, 401, and 500, and the checks assert the portal says
   so: no fabricated zeroes on stat tiles, no error rendered as an empty
   state, no blank screen on an expired session.
+- **`e2e/user-management.mjs`** — provisioning a user, the one-time
+  password, the forced password change, and an open session dying the
+  moment the account is deactivated.
+- **`e2e/search-and-paging.mjs`** — searching by serial, filtering by
+  outcome, and walking pages without repeating or skipping rows.
 - **`e2e/write-flows.mjs`** — the actions that CHANGE something, which
   the other two never touch: creating a tenant, suspending and
   reactivating it, creating a profile (and being refused a duplicate PIN

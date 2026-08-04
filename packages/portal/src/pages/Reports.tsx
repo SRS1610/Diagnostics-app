@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type DiagnosticResult, type Report } from "../api/client";
-import { AsyncBoundary, StatusBadge, formatDate, useApi } from "../components/common";
+import { AsyncBoundary, Pager, StatusBadge, formatDate, useApi, useDebounced } from "../components/common";
 
 // Where the consumer app is deployed. Deliberately a SEPARATE origin
 // from this portal: a consumer page and a staff session must never share
@@ -22,17 +22,78 @@ const SOURCE_LABEL: Record<string, string> = {
   ocr: "Read from photo",
 };
 
+const STATUS_FILTERS = [
+  { label: "All", value: "" },
+  { label: "Passed", value: "pass" },
+  { label: "With warnings", value: "pass_with_warnings" },
+  { label: "Failed", value: "fail" },
+];
+
+const PAGE_SIZE = 25;
+
 export function ReportsPage() {
-  const { data, loading, error } = useApi(() => api.get<Report[]>("/reports"));
-  const reports = data ?? [];
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const [offset, setOffset] = useState(0);
+
+  // Debounced so typing a serial does not fire a request per keystroke.
+  const search = useDebounced(query.trim());
+
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+  if (search) params.set("q", search);
+  if (status) params.set("status", status);
+
+  const { data, loading, error } = useApi(() => api.getPage<Report>(`/reports?${params}`), [search, status, offset]);
+  const reports = data?.items ?? [];
+
+  // Changing what is being searched has to send you back to the first
+  // page: staying on offset 100 of a filter with three matches shows an
+  // empty table that looks like "no results".
+  const changeFilter = (next: () => void) => {
+    setOffset(0);
+    next();
+  };
 
   return (
     <>
       <h1 className="page-title">Reports</h1>
       <p className="page-sub">Every inspection for this tenant</p>
 
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="field" style={{ marginBottom: 10 }}>
+          <label htmlFor="rsearch">Search</label>
+          <input
+            id="rsearch"
+            className="input"
+            placeholder="Serial number, IMEI, make or model"
+            value={query}
+            onChange={(e) => changeFilter(() => setQuery(e.target.value))}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.label}
+              className={`btn btn-sm ${status === f.value ? "" : "btn-secondary"}`}
+              onClick={() => changeFilter(() => setStatus(f.value))}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <AsyncBoundary loading={loading} error={error} isEmpty={reports.length === 0} emptyMessage="No reports yet.">
+        <AsyncBoundary
+          loading={loading}
+          error={error}
+          isEmpty={reports.length === 0}
+          emptyMessage={
+            search || status
+              ? "No inspections match that search."
+              : "No reports yet."
+          }
+        >
           <table>
             <thead>
               <tr>
@@ -61,6 +122,10 @@ export function ReportsPage() {
           </table>
         </AsyncBoundary>
       </div>
+
+      {data && !error && (
+        <Pager total={data.total} limit={data.limit} offset={data.offset} onOffset={setOffset} loading={loading} />
+      )}
     </>
   );
 }

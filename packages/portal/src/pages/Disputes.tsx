@@ -20,10 +20,25 @@ export function DisputesPage() {
   // offered a button that always fails.
   const { role } = useSession();
   const canResolve = role !== "tenant_staff";
-  const { data, loading, error, reload } = useApi(() => api.get<Dispute[]>("/disputes"));
-  const disputes = data ?? [];
-  const open = disputes.filter((d) => d.status === "awaiting_review");
-  const resolved = disputes.filter((d) => d.status !== "awaiting_review");
+  // Fetched as two lists rather than one split client-side. A single
+  // fetch meant the open queue and the resolved history shared one page
+  // and one ordering — so on a busy tenant a dispute resolved today fell
+  // off the end of a list ordered oldest-first, and looked as though it
+  // had never been resolved.
+  const openQuery = useApi(() => api.getPage<Dispute>("/disputes?status=awaiting_review&limit=50"));
+  const resolvedQuery = useApi(() => api.getPage<Dispute>("/disputes?order=newest&limit=25"));
+
+  const open = openQuery.data?.items ?? [];
+  // The resolved endpoint returns every status, so the open ones are
+  // filtered out here rather than fetched twice.
+  const resolved = (resolvedQuery.data?.items ?? []).filter((d) => d.status !== "awaiting_review");
+
+  const loading = openQuery.loading;
+  const error = openQuery.error;
+  const reload = () => {
+    void openQuery.reload();
+    void resolvedQuery.reload();
+  };
 
   return (
     <>
@@ -48,8 +63,10 @@ export function DisputesPage() {
 
       <h2 style={{ fontSize: 15, margin: "0 0 10px" }}>Resolved</h2>
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        {resolved.length === 0 ? (
-          <div className="empty">No resolved disputes.</div>
+        {resolvedQuery.error ? (
+          <div className="error-box">{resolvedQuery.error}</div>
+        ) : resolved.length === 0 ? (
+          <div className="empty">{resolvedQuery.loading ? "Loading…" : "No resolved disputes."}</div>
         ) : (
           <table>
             <thead>

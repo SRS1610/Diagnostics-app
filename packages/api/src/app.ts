@@ -44,7 +44,10 @@ import usersRoutes from "./routes/users";
 
 export function createApp() {
   const app = express();
-  app.use(cors());
+  // Pagination metadata travels in headers (see lib/pagination.ts), and
+  // a browser cannot read a custom response header unless the server
+  // says so — without this the portal sees the rows but no counts.
+  app.use(cors({ exposedHeaders: ["X-Total-Count", "X-Limit", "X-Offset", "X-Has-More"] }));
   // Explicit rather than relying on body-parser's 100kb default — a report
   // carries a full DiagnosticResult[] and this cap should be a decision,
   // not an accident. Raise deliberately if real test payloads approach it.

@@ -240,10 +240,10 @@ await check("resolving a dispute requires written reasoning", async () => {
 });
 
 await check("a resolved dispute keeps its reasoning on the record", async () => {
-  const body = await page.textContent("body");
-  if (!body.includes(REASONING)) {
-    throw new Error("the resolution reasoning is not shown in the resolved list");
-  }
+  // Waits rather than reading once: the open queue and the resolved
+  // history are separate fetches now, so the row leaving the queue does
+  // not mean the resolved list has come back yet.
+  await page.waitForFunction((text) => document.body.textContent.includes(text), REASONING);
 });
 
 // The duplicate-PIN check deliberately provokes a 409, so the browser

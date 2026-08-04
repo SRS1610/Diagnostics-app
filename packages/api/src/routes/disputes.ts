@@ -19,6 +19,7 @@
 import { Router } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { requireAuth } from "../middleware/auth";
+import { parseListWindow, setPaginationHeaders } from "../lib/pagination";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
 
@@ -33,13 +34,26 @@ router.get("/", requireAuth, requireTenantScope, async (req, res) => {
   const where: Prisma.DisputeWhereInput = { ...tenantWhere(req) };
   if (typeof status === "string" && status) where.status = status;
 
-  const disputes = await prisma.dispute.findMany({
-    where,
-    // Oldest first: this is a work queue, and a dispute holds a device
-    // and a payout, so the longest-waiting customer should surface top.
-    orderBy: { submittedAt: "asc" },
-    take: 200,
-  });
+  const { limit, offset } = parseListWindow(req);
+
+  // Oldest-first is right for the OPEN queue — the longest-waiting
+  // customer should surface first — but wrong for resolved history,
+  // where the interesting rows are the recent ones. With a single
+  // ordering and a page limit, a dispute resolved today disappeared off
+  // the end of the list as soon as a tenant had more than one page of
+  // them.
+  const newestFirst = req.query.order === "newest";
+  const [total, disputes] = await Promise.all([
+    prisma.dispute.count({ where }),
+    prisma.dispute.findMany({
+      where,
+      orderBy: { submittedAt: newestFirst ? "desc" : "asc" },
+      take: limit,
+      skip: offset,
+    }),
+  ]);
+
+  setPaginationHeaders(res, { total, limit, offset });
   res.json(disputes);
 });
 

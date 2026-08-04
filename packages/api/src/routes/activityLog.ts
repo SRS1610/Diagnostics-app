@@ -15,13 +15,12 @@ import { Router } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { ActivityAction } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
+import { parseListWindow, setPaginationHeaders } from "../lib/pagination";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 
 const router = Router();
 const prisma = new PrismaClient();
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
 
 // ActivityAction is a TS union with no runtime array of its own — mirror
 // its literal values here so an unrecognized ?actions= value gets a
@@ -62,7 +61,7 @@ const VALID_ACTIONS = new Set<ActivityAction>([
 ]);
 
 router.get("/", requireAuth, requireTenantScope, async (req, res) => {
-  const { actions, actorUserId, fromDate, toDate, limit } = req.query;
+  const { actions, actorUserId, fromDate, toDate } = req.query;
 
   const where: Prisma.ActivityLogEntryWhereInput = { ...tenantWhere(req) };
 
@@ -84,14 +83,17 @@ router.get("/", requireAuth, requireTenantScope, async (req, res) => {
     };
   }
 
-  let take = DEFAULT_LIMIT;
-  if (typeof limit === "string") {
-    const parsed = Number.parseInt(limit, 10);
-    if (Number.isFinite(parsed) && parsed > 0) take = Math.min(parsed, MAX_LIMIT);
-  }
+  // Offset paging on top of the filters this route already had — an
+  // audit trail is the one list nobody should be able to reach the end
+  // of and quietly stop.
+  const { limit: take, offset } = parseListWindow(req);
+
+  const total = await prisma.activityLogEntry.count({ where });
+  setPaginationHeaders(res, { total, limit: take, offset });
 
   const entries = await prisma.activityLogEntry.findMany({
     where,
+    skip: offset,
     orderBy: { timestamp: "desc" },
     take,
   });
