@@ -21,13 +21,12 @@
 // customer a bill for nothing.
 
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
 import { generateInvoiceLineItems, type License, type LicenseType } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const INVOICE_STATUSES = new Set(["draft", "sent", "paid", "overdue", "void"]);
 const PAYMENT_TERMS_DAYS = 30;

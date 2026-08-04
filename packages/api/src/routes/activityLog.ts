@@ -12,14 +12,14 @@
 // scope, not built here.
 
 import { Router } from "express";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { ActivityAction } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { parseListWindow, setPaginationHeaders } from "../lib/pagination";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 
 // ActivityAction is a TS union with no runtime array of its own — mirror

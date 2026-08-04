@@ -20,14 +20,14 @@
 // uploading real prices, not by a flag.
 
 import { Router } from "express";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { computeTradeInQuote, type CosmeticGrade, type DiagnosticResult, type MarketPriceEntry } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const GRADES = new Set(["A", "B", "C", "D"]);
 const PAYOUT_METHODS = new Set(["store_credit", "ach", "paypal", "gift_card"]);

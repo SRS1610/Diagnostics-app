@@ -8,15 +8,14 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
 import rateLimit from "express-rate-limit";
 import { createHash } from "node:crypto";
 import { requireAuth, requireMasterAdmin } from "../middleware/auth";
 import { buildActivityLogData } from "../lib/activityLog";
 import { generateResetToken, validatePassword } from "../lib/passwords";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
 router.post("/login", async (req, res) => {

@@ -29,15 +29,15 @@
 // low-entropy, non-secret identifier by the same design as badgeCode.
 
 import { Router } from "express";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import rateLimit from "express-rate-limit";
 import { TEST_CATALOG, generateProfileQrPayload } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const PIN_PATTERN = /^\d{4,6}$/;
 const VALID_TEST_IDS = new Set(TEST_CATALOG.map((t) => t.testId));

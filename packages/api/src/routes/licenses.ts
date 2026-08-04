@@ -15,15 +15,14 @@
 // itself, not just a preceding findFirst).
 
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
 import rateLimit from "express-rate-limit";
 import { checkLicense, License, LicenseType } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const VALID_LICENSE_TYPES: LicenseType[] = [
   "per_inspection",

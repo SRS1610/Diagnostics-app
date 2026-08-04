@@ -13,14 +13,14 @@
 // another tenant's report.
 
 import { Router } from "express";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { requireTechnicianAuth, technicianTenantWhere } from "../middleware/technicianAuth";
 import { buildActivityLogData } from "../lib/activityLog";
+import { prisma } from "../lib/prisma";
 
 const router = Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 const WIPE_STANDARDS = new Set(["nist_800_88_clear", "nist_800_88_purge"]);
 

@@ -19,14 +19,14 @@
 //     carry the exact window they were computed over.
 
 import { Router } from "express";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { csvDocument, csvFilename } from "../lib/csv";
 import { parseDate } from "../lib/pagination";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /** The routing decisions deviceRouting.ts can produce, in the order a
  *  reader expects: best outcome first, then the hold. */

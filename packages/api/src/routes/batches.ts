@@ -11,13 +11,12 @@
 // progress from the Devices tab.
 
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { requireTechnicianAuth, technicianTenantWhere } from "../middleware/technicianAuth";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get("/", requireAuth, requireTenantScope, async (req, res) => {
   const batches = await prisma.batchSession.findMany({

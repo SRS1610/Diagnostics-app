@@ -15,13 +15,13 @@
 
 import { Router } from "express";
 import bcrypt from "bcrypt";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { requireAuth, requireMasterConsole } from "../middleware/auth";
 import { buildActivityLogData } from "../lib/activityLog";
 import { generateTemporaryPassword } from "../lib/passwords";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Cross-tenant list — legitimate Master Console aggregate view.
 router.get("/", requireAuth, requireMasterConsole, async (_req, res) => {

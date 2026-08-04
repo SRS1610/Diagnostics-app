@@ -14,7 +14,7 @@
 // read-only mobile lookups didn't.
 
 import { Router } from "express";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { computeOverallStatus, DiagnosticResult } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
@@ -22,9 +22,9 @@ import { requireTechnicianAuth, technicianTenantWhere } from "../middleware/tech
 import { mintConsumerToken } from "../lib/consumerToken";
 import { parseDate, parseListWindow, parseSearch, setPaginationHeaders } from "../lib/pagination";
 import { csvDocument, csvFilename } from "../lib/csv";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const CAPTURE_SOURCES = new Set(["barcode", "ocr", "manual"]);
 const RESULT_STATUSES = new Set(["pass", "fail", "warning", "skipped"]);

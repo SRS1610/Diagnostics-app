@@ -10,13 +10,12 @@
 // that lookup IS the tenant boundary.
 
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const CLAIM_STATUSES = new Set(["open", "investigating", "approved", "denied", "resolved"]);
 const DEFAULT_WARRANTY_DAYS = 90;

@@ -17,7 +17,7 @@
 // auto-publishing to eBay/Swappa as explicitly out of scope for MVP.
 
 import { Router } from "express";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   generateListing,
   type AuditReport,
@@ -27,9 +27,9 @@ import {
 } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const GRADES = new Set(["A", "B", "C", "D"]);
 

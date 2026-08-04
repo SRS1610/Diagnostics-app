@@ -23,15 +23,15 @@
 //     band. Pretending to send a message nobody receives would be worse.
 
 import { Router } from "express";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
 import { generateTemporaryPassword, PASSWORD_MIN_LENGTH, validatePassword } from "../lib/passwords";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const BCRYPT_ROUNDS = 10;
 const TENANT_ROLES = new Set(["tenant_admin", "tenant_staff"]);

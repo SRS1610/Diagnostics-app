@@ -27,15 +27,15 @@
 // a Technician identity for a mobile session, not a portal session.
 
 import { Router } from "express";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import rateLimit from "express-rate-limit";
 import { generateTechnicianBadgePayload } from "@diagnostics/shared";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { issueTechnicianToken } from "../middleware/technicianAuth";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // badgeCode is a low-entropy, non-secret identifier (CLAUDE.md: "about
 // attribution... not security") looked up by a client-supplied tenantId

@@ -17,14 +17,14 @@
 //    but the resolution records enough to reconstruct it later.
 
 import { Router } from "express";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { requireAuth } from "../middleware/auth";
 import { parseListWindow, setPaginationHeaders } from "../lib/pagination";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const OPEN_STATUS = "awaiting_review";
 const RESOLVED_STATUSES = { uphold: "resolved_upheld", adjust: "resolved_adjusted" } as const;

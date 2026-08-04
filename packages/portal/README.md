@@ -57,6 +57,10 @@ npm run test:e2e --workspace=packages/portal
 - **`e2e/export-and-compliance.mjs`** — the compliance summary, and CSV
   downloads actually producing a file with the right columns and the
   filter that was on screen.
+- **`e2e/operations-pages.mjs`** — the trade-in, invoices, batch intake
+  and warranty pages: a seed-priced quote cannot be accepted, a payout
+  record states plainly that it isn't a payment, and an invoice page
+  says nothing here charges anyone.
 - **`e2e/write-flows.mjs`** — the actions that CHANGE something, which
   the other two never touch: creating a tenant, suspending and
   reactivating it, creating a profile (and being refused a duplicate PIN

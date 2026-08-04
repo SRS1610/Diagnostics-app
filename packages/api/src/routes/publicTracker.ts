@@ -43,12 +43,12 @@
 // publicly, that should be a decision someone makes on purpose.
 
 import { Router } from "express";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import rateLimit from "express-rate-limit";
 import { looksLikeConsumerToken } from "../lib/consumerToken";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Unauthenticated and internet-facing. The token is 256 bits so
 // enumeration isn't the threat this addresses — it's the cost of an
