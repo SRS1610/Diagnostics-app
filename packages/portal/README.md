@@ -25,6 +25,9 @@ Seeded logins (see `packages/api/prisma/seed.ts`):
 ## Testing
 
 ```bash
+# 0. once per machine — installs the Chromium these checks drive
+npm run e2e:install --workspace=packages/portal
+
 # 1. API (needs Postgres running and the database seeded)
 npm run dev --workspace=packages/api
 
@@ -56,6 +59,22 @@ refresh built without a warning. The dashboard that reported a failed
 fetch as "0 disputes awaiting review" was correct TypeScript rendering a
 false claim. Catching either needs a browser, a live API, and an
 assertion about what a human would actually read.
+
+### The browser
+
+`playwright-core` is the Playwright library *without* the browser
+downloader, so a fresh checkout has nothing to drive until
+`npm run e2e:install` fetches one (~120 MB, once). Already have a Chrome
+or Chromium? Point at it instead and skip the download:
+
+```bash
+CHROMIUM_PATH=/path/to/chrome npm run test:e2e --workspace=packages/portal
+```
+
+Managed/CI environments that pre-install browsers are detected via
+`PLAYWRIGHT_BROWSERS_PATH` and need neither. If no browser can be found
+the suites say so and exit non-zero, rather than failing with a stack
+trace.
 
 Useful environment variables: `PORTAL_URL`, `API_URL`, `MASTER_EMAIL`,
 `TENANT_EMAIL`, `PORTAL_PASSWORD`, `TENANT_NAME`, `CHROMIUM_PATH`,

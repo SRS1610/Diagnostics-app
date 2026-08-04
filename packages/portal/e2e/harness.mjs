@@ -30,19 +30,61 @@ export const TENANT_ADMIN = {
 };
 export const TENANT_NAME = process.env.TENANT_NAME ?? "Acme Wireless";
 
-/** Where Chromium lives. PLAYWRIGHT_BROWSERS_PATH is set in the managed
- *  container; elsewhere `npx playwright install chromium` puts it where
- *  playwright-core looks by default, so this stays undefined. */
-const executablePath = process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium";
+/**
+ * Finds a Chromium to drive.
+ *
+ * playwright-core deliberately ships NO browsers — it is the library
+ * without the downloader — so on a fresh checkout there may be nothing
+ * to launch. Left alone it fails with a stack trace and a banner telling
+ * you to run `npx playwright install`, which installs a different
+ * package's browsers and is not the command this project wants. Hence
+ * resolving explicitly and failing with something you can act on.
+ *
+ * Order: an explicit CHROMIUM_PATH, then the managed container's
+ * pre-installed copy, then wherever a local `playwright install` put one.
+ */
+async function resolveChromium() {
+  const candidates = [
+    process.env.CHROMIUM_PATH,
+    process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium` : null,
+    "/opt/pw-browsers/chromium",
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) return candidate;
+  }
+  // Nothing explicit found. Returning undefined lets playwright-core try
+  // its own default location, which is where `npm run e2e:install` puts
+  // a browser — so this is the normal path on a developer machine, not a
+  // failure.
+  return undefined;
+}
 
 export async function launch() {
   const results = { passed: 0, failed: 0 };
   const browserErrors = [];
 
-  const browser = await chromium.launch({
-    executablePath: (await fileExists(executablePath)) ? executablePath : undefined,
-    args: ["--no-sandbox"],
-  });
+  let browser;
+  try {
+    browser = await chromium.launch({
+      executablePath: await resolveChromium(),
+      // Required when running as root, which is the case in most
+      // containers and in this project's managed environment.
+      args: ["--no-sandbox"],
+    });
+  } catch (e) {
+    if (/Executable doesn't exist|Failed to launch/i.test(e.message)) {
+      console.error(
+        `\nNo Chromium available to run these checks.\n\n` +
+          `  npm run e2e:install --workspace=packages/portal\n\n` +
+          `installs one (~120 MB, once). If you already have a Chromium or Chrome,\n` +
+          `point at it instead:\n\n` +
+          `  CHROMIUM_PATH=/path/to/chrome npm run test:e2e --workspace=packages/portal\n`,
+      );
+      process.exit(1);
+    }
+    throw e;
+  }
   const page = await browser.newPage();
   page.setDefaultTimeout(Number(process.env.E2E_TIMEOUT ?? 8000));
 
