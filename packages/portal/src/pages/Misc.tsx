@@ -12,6 +12,7 @@ import {
   type MfaEnrollResponse,
   type OrgSettings,
   type PortalUser,
+  type SsoConnectionSummary,
   type Technician,
 } from "../api/client";
 import { useSession } from "../auth/SessionContext";
@@ -297,7 +298,11 @@ export function TeamPage() {
 // this list breaks the filter rather than quietly narrowing it.
 const ACTION_FILTERS = [
   { label: "All", value: "" },
-  { label: "Auth", value: "portal_login,portal_logout,entered_tenant_view,exited_tenant_view" },
+  { label: "Auth", value: "portal_login,portal_logout,entered_tenant_view,exited_tenant_view,sso_login,sso_connection_configured" },
+  {
+    label: "Billing",
+    value: "billing_checkout_completed,billing_payment_failed,billing_payment_recovered,billing_subscription_canceled",
+  },
   { label: "Tenants", value: "tenant_created,tenant_suspended,tenant_activated" },
   { label: "Profiles", value: "profile_created,profile_updated,profile_deleted" },
   {
@@ -631,6 +636,209 @@ function SecuritySection() {
 }
 
 // ============================================================
+// Single sign-on — one OIDC connection per tenant, shown on Settings.
+// Admin-only, same as the rest of this page's editable fields.
+// ============================================================
+
+function SsoSection() {
+  const { role } = useSession();
+  const canEdit = role !== "tenant_staff";
+  const { data, loading, error, reload } = useApi(() => api.get<SsoConnectionSummary | null>("/sso"));
+
+  const [editing, setEditing] = useState(false);
+  const [domain, setDomain] = useState("");
+  const [issuer, setIssuer] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [authorizationEndpoint, setAuthorizationEndpoint] = useState("");
+  const [tokenEndpoint, setTokenEndpoint] = useState("");
+  const [jwksUri, setJwksUri] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const startEditing = () => {
+    if (data) {
+      setDomain(data.domain);
+      setIssuer(data.issuer);
+      setClientId(data.clientId);
+      setClientSecret("");
+      setAuthorizationEndpoint(data.authorizationEndpoint);
+      setTokenEndpoint(data.tokenEndpoint);
+      setJwksUri(data.jwksUri);
+    } else {
+      setDomain("");
+      setIssuer("");
+      setClientId("");
+      setClientSecret("");
+      setAuthorizationEndpoint("");
+      setTokenEndpoint("");
+      setJwksUri("");
+    }
+    setFormError(null);
+    setEditing(true);
+  };
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setBusy(true);
+    try {
+      await api.post("/sso", { domain, issuer, clientId, clientSecret, authorizationEndpoint, tokenEndpoint, jwksUri });
+      setEditing(false);
+      await reload();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Could not save this SSO connection");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Overrides the fetched value the instant a checkbox is clicked,
+  // rather than waiting on the PATCH + reload round trip to reflect it.
+  // Without this, setActionError(null) below triggers a re-render before
+  // either await resolves, and a controlled checkbox tied straight to
+  // the still-stale fetched `data` snaps back to its old state for a
+  // moment — a click that visibly does nothing reads as broken, even
+  // though the request is in flight and will succeed a beat later.
+  const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
+  const [pendingEnforced, setPendingEnforced] = useState<boolean | null>(null);
+
+  const toggle = async (field: "enabled" | "enforced", value: boolean) => {
+    setActionError(null);
+    const setPending = field === "enabled" ? setPendingEnabled : setPendingEnforced;
+    setPending(value);
+    try {
+      await api.patch("/sso", { [field]: value });
+      await reload();
+      setPending(null); // trust the freshly-reloaded data from here on
+    } catch (err) {
+      setPending(null); // revert the optimistic value on failure
+      setActionError(err instanceof Error ? err.message : "Could not update this setting");
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm("Remove this SSO connection? Users at this organization will no longer be able to sign in with it.")) return;
+    setActionError(null);
+    try {
+      await api.delete("/sso");
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Could not remove this connection");
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Single sign-on</h2>
+
+      <AsyncBoundary loading={loading} error={error}>
+        {editing ? (
+          <form onSubmit={save}>
+            {formError && <div className="error-box">{formError}</div>}
+            <div className="field">
+              <label htmlFor="ssodomain">Email domain</label>
+              <input id="ssodomain" className="input" placeholder="acme.com" value={domain} onChange={(e) => setDomain(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="ssoissuer">Issuer</label>
+              <input id="ssoissuer" className="input" value={issuer} onChange={(e) => setIssuer(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="ssoclientid">Client ID</label>
+              <input id="ssoclientid" className="input" value={clientId} onChange={(e) => setClientId(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="ssoclientsecret">Client secret{data ? " (leave blank to keep the current one)" : ""}</label>
+              <input
+                id="ssoclientsecret"
+                className="input"
+                type="password"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                required={!data}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="ssoauth">Authorization endpoint</label>
+              <input id="ssoauth" className="input" value={authorizationEndpoint} onChange={(e) => setAuthorizationEndpoint(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="ssotoken">Token endpoint</label>
+              <input id="ssotoken" className="input" value={tokenEndpoint} onChange={(e) => setTokenEndpoint(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="ssojwks">JWKS URI</label>
+              <input id="ssojwks" className="input" value={jwksUri} onChange={(e) => setJwksUri(e.target.value)} required />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn" disabled={busy}>{busy ? "Saving…" : "Save connection"}</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setEditing(false)}>Cancel</button>
+            </div>
+          </form>
+        ) : data ? (
+          <>
+            {actionError && <div className="error-box">{actionError}</div>}
+            {(() => {
+              const enabledChecked = pendingEnabled ?? data.enabled;
+              const enforcedChecked = pendingEnforced ?? data.enforced;
+              return (
+                <>
+                  <p style={{ margin: "0 0 10px" }}>
+                    <StatusBadge status={enabledChecked ? "active" : "deactivated"} />{" "}
+                    <span className="muted" style={{ fontSize: 13 }}>
+                      Domain <code>{data.domain}</code> · issuer <code>{data.issuer}</code>
+                    </span>
+                  </p>
+                  {canEdit && (
+                    <>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                        <input type="checkbox" checked={enabledChecked} onChange={(e) => void toggle("enabled", e.target.checked)} />
+                        Enabled — users at this domain can sign in with SSO
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                        <input
+                          type="checkbox"
+                          checked={enforcedChecked}
+                          disabled={!enabledChecked && !enforcedChecked}
+                          onChange={(e) => void toggle("enforced", e.target.checked)}
+                        />
+                        Enforced — staff accounts can no longer sign in with a password (admins keep a break-glass path)
+                      </label>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+            {canEdit ? (
+              <>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn btn-secondary" onClick={startEditing}>Edit connection</button>
+                  <button className="btn btn-secondary" onClick={() => void remove()}>Remove</button>
+                </div>
+              </>
+            ) : (
+              <p className="muted" style={{ fontSize: 12.5 }}>Configuring SSO requires tenant admin permissions.</p>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="muted" style={{ fontSize: 13 }}>
+              Not configured. Add an OIDC connection so this organization's users can sign in through their own identity
+              provider (Okta, Azure AD, Google Workspace, or any standard OIDC issuer) instead of a portal password.
+            </p>
+            {canEdit && (
+              <button className="btn" onClick={startEditing}>Configure SSO</button>
+            )}
+          </>
+        )}
+      </AsyncBoundary>
+    </div>
+  );
+}
+
+// ============================================================
 // Settings — admin_portal_settings.html
 // ============================================================
 
@@ -685,6 +893,7 @@ export function SettingsPage() {
       <p className="page-sub">Organisation configuration</p>
 
       <SecuritySection />
+      <SsoSection />
 
       <AsyncBoundary loading={loading} error={error}>
         {data && (

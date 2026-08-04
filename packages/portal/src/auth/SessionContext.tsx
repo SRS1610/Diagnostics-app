@@ -48,6 +48,9 @@ interface SessionContextValue extends Partial<StoredSession> {
   login: (email: string, password: string) => Promise<{ role: PortalRole } | MfaRequiredResponse>;
   /** Completes an MFA-gated sign-in with a TOTP or backup code. */
   verifyMfa: (mfaToken: string, code: string) => Promise<PortalRole>;
+  /** Trades a one-time SSO handoff (from the /sso/complete redirect) for
+   *  a real session, off the URL. */
+  completeSso: (handoff: string) => Promise<PortalRole>;
   logout: () => void;
   enterTenantView: (tenantId: string, companyName: string) => Promise<void>;
   exitTenantView: () => Promise<void>;
@@ -125,6 +128,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return res.user.role;
   }, []);
 
+  const completeSso = useCallback(async (handoff: string) => {
+    const res = await api.post<LoginResponse>("/auth/sso/exchange", { handoff });
+    setSession({
+      token: res.token,
+      email: res.user.email,
+      role: res.user.role,
+      viewingTenantId: res.user.tenantId,
+      viewingTenantName: null,
+      mustChangePassword: Boolean(res.user.mustChangePassword),
+    });
+    return res.user.role;
+  }, []);
+
   const enterTenantView = useCallback(async (tenantId: string, companyName: string) => {
     const res = await api.post<{ token: string; viewingTenantId: string }>("/auth/enter-tenant-view", { tenantId });
     setSession((prev) =>
@@ -147,13 +163,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: Boolean(session?.token),
       login,
       verifyMfa,
+      completeSso,
       logout,
       enterTenantView,
       exitTenantView,
       clearMustChangePassword,
       mustChangePassword: Boolean(session?.mustChangePassword),
     }),
-    [session, login, verifyMfa, logout, enterTenantView, exitTenantView, clearMustChangePassword],
+    [session, login, verifyMfa, completeSso, logout, enterTenantView, exitTenantView, clearMustChangePassword],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

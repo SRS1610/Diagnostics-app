@@ -242,6 +242,25 @@ export interface WebhookDeliveryRecord {
   attemptedAt: string;
 }
 
+export interface SsoStartResponse {
+  authorizationUrl: string;
+}
+
+export interface SsoConnectionSummary {
+  connectionId: string;
+  domain: string;
+  issuer: string;
+  clientId: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  jwksUri: string;
+  enabled: boolean;
+  enforced: boolean;
+  hasClientSecret: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PortalUser {
   userId: string;
   email: string;

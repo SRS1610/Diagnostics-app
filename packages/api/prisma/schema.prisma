@@ -57,6 +57,12 @@ model Tenant {
   batches      BatchSession[]
   apiKeys      ApiKey[]
   webhookEndpoints WebhookEndpoint[]
+  ssoConnection SsoConnection?
+
+  // Stripe billing (billing.ts). Null until the tenant's first checkout
+  // — a tenant on a portal-admin-provisioned license (the existing path,
+  // still fully supported) never needs one.
+  stripeCustomerId String? @unique
 
   @@map("tenants")
 }
@@ -97,6 +103,15 @@ model License {
   overageRatePerInspection Float?
   seatLimit                Int?
   activeSeats              Int      @default(0)
+
+  // Stripe billing (billing.ts). Null for a license provisioned directly
+  // by an admin (still the primary path) — set once a checkout completes
+  // through Stripe instead. status gains "past_due" as a value when this
+  // is non-null: dunning (a failed renewal payment) marks the license
+  // past_due rather than immediately expired, since Stripe itself retries
+  // a failed card a few times before giving up — this mirrors that grace
+  // period instead of cutting the tenant off on the first failure.
+  stripeSubscriptionId String? @unique
 
   invoices Invoice[]
 
@@ -155,10 +170,68 @@ model PortalUser {
   mfaSecret     String?
   mfaEnrolledAt DateTime?
 
+  // SSO (sso.ts). Set once this account is linked to an identity from
+  // the tenant's OIDC provider — either because it signed in via SSO for
+  // the first time (JIT-provisioned, if no matching email existed) or
+  // because an existing password-based account's first SSO login linked
+  // it by email. Once linked, ssoSubject is what future logins match on
+  // — NOT email, which a compromised or reassigned mailbox could change
+  // at the IdP without this account's knowledge.
+  ssoSubject String?
+
   passwordResets PasswordResetToken[]
   mfaBackupCodes MfaBackupCode[]
 
+  // Unique only when set — Postgres treats multiple NULLs as distinct
+  // under a unique index, so accounts that have never used SSO (the
+  // overwhelming majority) don't collide with each other here.
+  @@unique([tenantId, ssoSubject])
   @@map("portal_users")
+}
+
+// ============================================================
+// SSO — tenant-level OIDC connection (sso.ts)
+//
+// One connection per tenant, matched at login time by the EMAIL DOMAIN
+// of whoever is trying to sign in — a user has no session yet at that
+// point, so there is nothing else to key off of. domain is unique
+// PLATFORM-WIDE (not just within a tenant): two tenants both claiming
+// "acme.com" would make the domain-based lookup ambiguous about which
+// one's IdP to redirect to, the same reasoning that makes portal user
+// email global rather than per-tenant.
+//
+// clientSecret is stored in reversible form, not hashed — the token
+// exchange with the IdP needs the actual secret to send, the same
+// reasoning as WebhookEndpoint.secret (needed to compute an HMAC) rather
+// than ApiKey.keyHash (only ever compared, never reused outbound).
+// ============================================================
+model SsoConnection {
+  connectionId String   @id @default(cuid())
+  tenantId     String   @unique
+  tenant       Tenant   @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
+  domain       String   @unique
+  issuer       String
+  clientId     String
+  clientSecret String
+  authorizationEndpoint String
+  tokenEndpoint         String
+  jwksUri               String
+
+  // Configured but not yet used to sign anyone in — kept off until an
+  // admin explicitly flips it, so a half-entered configuration can never
+  // accidentally start redirecting logins to a broken or wrong IdP.
+  enabled  Boolean @default(false)
+  // When true, password login is refused for this tenant's portal users
+  // — see auth.ts's login() for the one deliberate exception (a
+  // tenant_admin keeps a password-login break-glass path, since a
+  // misconfigured IdP with enforcement on and no exception would lock
+  // every admin out with no way back in short of a database edit).
+  enforced Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sso_connections")
 }
 
 /// A one-time MFA recovery code, same shape as PasswordResetToken and

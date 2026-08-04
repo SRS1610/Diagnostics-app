@@ -14,10 +14,14 @@ import { requireAuth, requireMasterAdmin } from "../middleware/auth";
 import { buildActivityLogData } from "../lib/activityLog";
 import { generateBackupCodes, generateResetToken, validatePassword } from "../lib/passwords";
 import { generateTotpSecret, totpEnrollmentUri, verifyTotpCode } from "../lib/totp";
+import { buildAuthorizationUrl, exchangeCodeForTokens, verifyIdToken } from "../lib/oidc";
 import { prisma } from "../lib/prisma";
+import { randomBytes } from "node:crypto";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET as string;
+const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:4000";
+const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL ?? "http://localhost:5173";
 
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
@@ -35,6 +39,20 @@ router.post("/login", async (req, res) => {
   // from a login form.
   if (!user.active) {
     return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  // SSO enforcement. Refused for tenant_staff, same hard-gate pattern as
+  // everything else in this app — but NOT for tenant_admin. A
+  // misconfigured or temporarily-down IdP with enforcement on and no
+  // exception would lock every admin at that tenant out with no way
+  // back in short of a database edit; a tenant_admin keeps a password
+  // break-glass path deliberately. master_admin is unaffected (no
+  // tenantId, not subject to any tenant's connection).
+  if (user.tenantId && user.role === "tenant_staff") {
+    const connection = await prisma.ssoConnection.findFirst({ where: { tenantId: user.tenantId, enforced: true } });
+    if (connection) {
+      return res.status(403).json({ error: "This organization requires signing in with SSO. Use the SSO link on the login page." });
+    }
   }
 
   const viewingTenantId = user.tenantId; // tenant users land in their own tenant;
@@ -512,6 +530,195 @@ router.post("/exit-tenant-view", requireAuth, requireMasterAdmin, async (req, re
   );
 
   res.json({ token, viewingTenantId: null });
+});
+
+// ============================================================
+// SSO (OIDC). Unauthenticated by nature — nobody has a session yet.
+//
+// Three-step flow, split this way specifically so the real 12h session
+// token never sits in a URL or browser history entry:
+//   1. POST /sso/start   — domain -> authorizationUrl to redirect the
+//      browser to
+//   2. GET  /sso/callback — the IdP redirects here with a code; this
+//      exchanges it, verifies the id_token, and redirects the browser to
+//      the portal with a short-lived, single-purpose HANDOFF token
+//   3. POST /sso/exchange — the portal immediately trades the handoff
+//      for the real session token, server-to-server, off the URL
+// ============================================================
+
+const ssoStartRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.SSO_START_RATE_LIMIT ?? 20),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Try again later." },
+});
+
+router.post("/sso/start", ssoStartRateLimit, async (req, res) => {
+  const { email } = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof email !== "string" || !email.includes("@")) {
+    return res.status(400).json({ error: "A valid email address is required" });
+  }
+  const domain = email.split("@")[1]?.trim().toLowerCase();
+  if (!domain) return res.status(400).json({ error: "A valid email address is required" });
+
+  const connection = await prisma.ssoConnection.findFirst({ where: { domain, enabled: true } });
+  if (!connection) {
+    return res.status(404).json({ error: "No SSO connection is configured for this email domain." });
+  }
+
+  const nonce = randomBytes(16).toString("hex");
+  const state = jwt.sign(
+    { kind: "sso_state", connectionId: connection.connectionId, nonce },
+    JWT_SECRET,
+    { expiresIn: "10m" },
+  );
+
+  const authorizationUrl = buildAuthorizationUrl(connection, {
+    redirectUri: `${API_BASE_URL}/auth/sso/callback`,
+    state,
+    nonce,
+  });
+
+  res.json({ authorizationUrl });
+});
+
+/** The IdP redirects the browser here. Always ends in a redirect back to
+ *  the portal — even on failure — since the caller is a browser
+ *  mid-navigation, not an API client that can read a JSON error body. */
+router.get("/sso/callback", async (req, res) => {
+  const failure = (message: string) =>
+    res.redirect(`${PORTAL_BASE_URL}/sso/complete?error=${encodeURIComponent(message)}`);
+
+  const { code, state } = req.query;
+  if (typeof code !== "string" || typeof state !== "string") {
+    return failure("Missing code or state from the identity provider.");
+  }
+
+  let decoded: { kind?: string; connectionId?: string; nonce?: string };
+  try {
+    decoded = jwt.verify(state, JWT_SECRET) as typeof decoded;
+  } catch {
+    return failure("This sign-in attempt has expired. Try again.");
+  }
+  if (decoded.kind !== "sso_state" || !decoded.connectionId || !decoded.nonce) {
+    return failure("Invalid sign-in attempt.");
+  }
+
+  const connection = await prisma.ssoConnection.findFirst({
+    where: { connectionId: decoded.connectionId, enabled: true },
+  });
+  if (!connection) return failure("This organization's SSO connection is no longer available.");
+
+  let identity: { subject: string; email: string };
+  try {
+    const { idToken } = await exchangeCodeForTokens(connection, code, `${API_BASE_URL}/auth/sso/callback`);
+    identity = await verifyIdToken(connection, idToken, decoded.nonce);
+  } catch (e) {
+    // Deliberately generic to the browser — the real cause (network
+    // failure, bad signature, issuer mismatch) goes to the server log,
+    // not into a URL that could end up in a support screenshot.
+    console.error("SSO callback failed:", e instanceof Error ? e.message : e);
+    return failure("Could not complete sign-in with your identity provider.");
+  }
+
+  // Find-or-link-or-provision, in that order: an existing SSO-linked
+  // account first (the common case after the first login), then an
+  // existing password-based account with a matching email (linked by
+  // email exactly once, moving forward matched by subject only — see
+  // the ssoSubject schema comment), then JIT-provision a new one.
+  let user = await prisma.portalUser.findFirst({
+    where: { tenantId: connection.tenantId, ssoSubject: identity.subject },
+  });
+  if (!user) {
+    const byEmail = await prisma.portalUser.findFirst({
+      where: { tenantId: connection.tenantId, email: identity.email, ssoSubject: null },
+    });
+    if (byEmail) {
+      user = await prisma.portalUser.update({
+        where: { userId: byEmail.userId },
+        data: { ssoSubject: identity.subject },
+      });
+    }
+  }
+  if (!user) {
+    user = await prisma.portalUser.create({
+      data: {
+        tenantId: connection.tenantId,
+        email: identity.email,
+        // Unusable on purpose — a JIT-provisioned account is SSO-only
+        // until an admin explicitly issues it a password via the
+        // existing reset-password path. A random hash (never returned,
+        // never logged) is simpler than a nullable passwordHash column
+        // and needs no schema or login-path special-casing elsewhere.
+        passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 10),
+        role: "tenant_staff",
+        ssoSubject: identity.subject,
+        mustChangePassword: false,
+      },
+    });
+  }
+
+  if (!user.active) return failure("This account has been deactivated.");
+
+  const handoffToken = jwt.sign({ kind: "sso_handoff", userId: user.userId }, JWT_SECRET, { expiresIn: "2m" });
+
+  await prisma.activityLogEntry.create({
+    data: buildActivityLogData({
+      tenantId: user.tenantId,
+      actorUserId: user.userId,
+      actorRole: user.role as any,
+      action: "sso_login",
+      targetType: "session",
+      targetId: user.userId,
+      details: `${user.email} signed in via SSO`,
+    }),
+  });
+
+  res.redirect(`${PORTAL_BASE_URL}/sso/complete?handoff=${handoffToken}`);
+});
+
+/** The portal calls this immediately after landing on /sso/complete —
+ *  server-to-server, off the URL — to trade the one-time handoff for the
+ *  real 12h session token. */
+router.post("/sso/exchange", async (req, res) => {
+  const { handoff } = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof handoff !== "string") return res.status(400).json({ error: "handoff is required" });
+
+  let decoded: { kind?: string; userId?: string };
+  try {
+    decoded = jwt.verify(handoff, JWT_SECRET) as typeof decoded;
+  } catch {
+    return res.status(401).json({ error: "This sign-in attempt has expired. Try again." });
+  }
+  if (decoded.kind !== "sso_handoff" || !decoded.userId) {
+    return res.status(401).json({ error: "Invalid sign-in attempt." });
+  }
+
+  // Re-read fresh rather than trusting the callback's snapshot — active/
+  // role could have changed in the (short) window since, same reasoning
+  // as mfa/verify re-checking the user server-side.
+  const user = await prisma.portalUser.findUnique({ where: { userId: decoded.userId } });
+  if (!user || !user.active) return res.status(401).json({ error: "This account is no longer available." });
+
+  const token = jwt.sign(
+    { kind: "portal", userId: user.userId, role: user.role, tenantId: user.tenantId, viewingTenantId: user.tenantId },
+    JWT_SECRET,
+    { expiresIn: "12h" },
+  );
+
+  await prisma.portalUser.update({ where: { userId: user.userId }, data: { lastLoginAt: new Date() } });
+
+  res.json({
+    token,
+    user: {
+      userId: user.userId,
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+      mustChangePassword: user.mustChangePassword,
+    },
+  });
 });
 
 export default router;

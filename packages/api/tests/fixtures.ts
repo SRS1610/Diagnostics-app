@@ -65,6 +65,7 @@ export async function resetDatabase(): Promise<void> {
   // clearing explicitly before the tenant delete below.
   await prisma.webhookEndpoint.deleteMany();
   await prisma.apiKey.deleteMany();
+  await prisma.ssoConnection.deleteMany();
   await prisma.tenant.deleteMany();
 }
 

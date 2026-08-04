@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "../auth/SessionContext";
-import { ApiError } from "../api/client";
+import { api, ApiError, type SsoStartResponse } from "../api/client";
 
 export function LoginPage() {
   const { login, verifyMfa } = useSession();
@@ -29,6 +29,37 @@ export function LoginPage() {
   // is what switches the form to the code screen.
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [code, setCode] = useState("");
+
+  // Scan-first, password-fallback is the pattern the rest of this app
+  // uses (profile QR, technician badge); SSO is the same idea for portal
+  // sign-in — offered as an alternative path, not a replacement, since
+  // most tenants have no SSO connection configured at all.
+  const [ssoMode, setSsoMode] = useState(false);
+  const [ssoEmail, setSsoEmail] = useState("");
+  const [ssoError, setSsoError] = useState<string | null>(null);
+  const [ssoBusy, setSsoBusy] = useState(false);
+
+  const submitSso = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSsoBusy(true);
+    setSsoError(null);
+    try {
+      const res = await api.post<SsoStartResponse>("/auth/sso/start", { email: ssoEmail.trim() });
+      // A real cross-origin navigation to the IdP, not a react-router
+      // route — the browser is leaving this app entirely until the IdP
+      // redirects it back to /sso/complete.
+      window.location.href = res.authorizationUrl;
+    } catch (err) {
+      setSsoError(
+        err instanceof ApiError && err.status === 404
+          ? "No SSO connection is configured for that email's organization."
+          : err instanceof ApiError
+            ? err.message
+            : "Could not start SSO sign-in. Check your connection and try again.",
+      );
+      setSsoBusy(false);
+    }
+  };
 
   const goHome = (role: string) => navigate(role === "master_admin" ? "/master" : "/dashboard", { replace: true });
 
@@ -113,6 +144,48 @@ export function LoginPage() {
     );
   }
 
+  if (ssoMode) {
+    return (
+      <div className="login-wrap">
+        <form className="login-card" onSubmit={submitSso}>
+          <h1 style={{ fontSize: 18, margin: "0 0 4px" }}>Sign in with SSO</h1>
+          <p className="page-sub">Enter your work email — we'll redirect you to your organization's identity provider</p>
+
+          {ssoError && <div className="error-box">{ssoError}</div>}
+
+          <div className="field">
+            <label htmlFor="ssoemail">Work email</label>
+            <input
+              id="ssoemail"
+              className="input"
+              type="email"
+              value={ssoEmail}
+              onChange={(e) => setSsoEmail(e.target.value)}
+              autoComplete="username"
+              autoFocus
+              required
+            />
+          </div>
+
+          <button className="btn" style={{ width: "100%" }} disabled={ssoBusy || !ssoEmail.trim()}>
+            {ssoBusy ? "Redirecting…" : "Continue"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ width: "100%", marginTop: 8 }}
+            onClick={() => {
+              setSsoMode(false);
+              setSsoError(null);
+            }}
+          >
+            Back to password sign-in
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submitPassword}>
@@ -149,6 +222,18 @@ export function LoginPage() {
 
         <button className="btn" style={{ width: "100%" }} disabled={busy || !email || !password}>
           {busy ? "Signing in…" : "Sign in"}
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ width: "100%", marginTop: 8 }}
+          onClick={() => {
+            setSsoMode(true);
+            setSsoError(null);
+          }}
+        >
+          Sign in with SSO
         </button>
       </form>
     </div>

@@ -17,6 +17,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useSession } from "./auth/SessionContext";
 import { MasterShell, TenantShell } from "./components/Shell";
 import { LoginPage } from "./pages/Login";
+import { SsoCompletePage } from "./pages/SsoComplete";
 import { MasterConsolePage } from "./pages/MasterConsole";
 import { DashboardPage } from "./pages/Dashboard";
 import { ReportDetailPage, ReportsPage } from "./pages/Reports";
@@ -65,6 +66,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to={home} replace /> : <LoginPage />} />
+      {/* Reachable regardless of auth state — the IdP redirect lands
+          here before this browser tab has any session at all. */}
+      <Route path="/sso/complete" element={<SsoCompletePage />} />
 
       {/* Reachable while mustChangePassword is set, unlike every other
           page — it is the way out of that state. Rendered in whichever
