@@ -215,3 +215,51 @@ describe("master_admin context rules", () => {
     ).toBe(403);
   });
 });
+
+// Swept for after finding the same defect class on Report's optional
+// relations. In both of these, NULL is not an absence — it is a claim:
+// a null tenantId on an activity-log row means "platform-level action",
+// and on a portal user it means "master_admin". Under Prisma's default
+// SetNull, deleting a tenant would not orphan these rows, it would
+// relabel them.
+describe("a tenant cannot be deleted out from under its audit trail", () => {
+  it("refuses to delete a tenant that has activity-log entries", async () => {
+    // Everything else pointing at this tenant is cleared first, so the
+    // audit trail is the ONLY thing left blocking the delete. Without
+    // this the test passed vacuously — reports, licences and technicians
+    // are required relations and already blocked it, so the assertion
+    // held whatever the activity-log constraint said.
+    await prisma.report.deleteMany({ where: { tenantId: fx.alpha.tenantId } });
+    await prisma.license.deleteMany({ where: { tenantId: fx.alpha.tenantId } });
+    await prisma.technician.deleteMany({ where: { tenantId: fx.alpha.tenantId } });
+    await prisma.customerProfile.deleteMany({ where: { tenantId: fx.alpha.tenantId } });
+    await prisma.portalUser.deleteMany({ where: { tenantId: fx.alpha.tenantId } });
+
+    const before = await prisma.activityLogEntry.count({ where: { tenantId: fx.alpha.tenantId } });
+    expect(before).toBeGreaterThan(0);
+
+    await expect(prisma.tenant.delete({ where: { tenantId: fx.alpha.tenantId } })).rejects.toThrow();
+
+    // No entry was relabelled as a platform-level action on the way.
+    const after = await prisma.activityLogEntry.count({ where: { tenantId: fx.alpha.tenantId } });
+    expect(after).toBe(before);
+  });
+
+  it("refuses to delete a tenant that still has portal users", async () => {
+    // Clear everything else that references this tenant, so the only
+    // thing left blocking the delete is the portal user itself.
+    await prisma.activityLogEntry.deleteMany({ where: { tenantId: fx.beta.tenantId } });
+    await prisma.report.deleteMany({ where: { tenantId: fx.beta.tenantId } });
+    await prisma.license.deleteMany({ where: { tenantId: fx.beta.tenantId } });
+    await prisma.technician.deleteMany({ where: { tenantId: fx.beta.tenantId } });
+    await prisma.customerProfile.deleteMany({ where: { tenantId: fx.beta.tenantId } });
+
+    await expect(prisma.tenant.delete({ where: { tenantId: fx.beta.tenantId } })).rejects.toThrow();
+
+    const user = await prisma.portalUser.findFirst({ where: { tenantId: fx.beta.tenantId } });
+    // Still scoped to its tenant, not silently promoted to the shape
+    // that means master_admin.
+    expect(user!.tenantId).toBe(fx.beta.tenantId);
+    expect(user!.role).toBe("tenant_admin");
+  });
+});

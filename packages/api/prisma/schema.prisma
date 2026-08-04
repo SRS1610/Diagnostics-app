@@ -106,7 +106,11 @@ model PortalUser {
   passwordHash String
   role         String // master_admin | tenant_admin | tenant_staff
   tenantId     String? // null ONLY for master_admin
-  tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId])
+  // Restrict, because null here MEANS master_admin. Under the Prisma
+  // default (SetNull), deleting a tenant would blank this on its
+  // tenant_admins and tenant_staff, silently converting scoped users
+  // into unscoped ones whose stored shape contradicts their role.
+  tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
   createdAt    DateTime @default(now())
 
   @@map("portal_users")
@@ -244,7 +248,12 @@ model WarrantyClaim {
 model ActivityLogEntry {
   entryId     String   @id @default(cuid())
   tenantId    String? // null for platform-level actions
-  tenant      Tenant?  @relation(fields: [tenantId], references: [tenantId])
+  // Restrict. Null here means "platform-level action", so the Prisma
+  // default (SetNull) would not merely orphan a deleted tenant's audit
+  // rows — it would RELABEL them as master-admin platform actions,
+  // which is worse than losing them. An audit trail that can be
+  // rewritten by deleting a row elsewhere is not one.
+  tenant      Tenant?  @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
   actorUserId String
   actorRole   String // master_admin | tenant_admin | tenant_staff | technician | system
   // "technician" means actorUserId is a Technician, not a PortalUser
