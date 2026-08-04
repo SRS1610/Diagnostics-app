@@ -46,6 +46,7 @@ import orgSettingsRoutes from "./routes/orgSettings";
 import integrationsRoutes from "./routes/integrations";
 import publicApiRoutes from "./routes/publicApi";
 import ssoRoutes from "./routes/sso";
+import billingRoutes from "./routes/billing";
 
 export function createApp() {
   const app = express();
@@ -56,7 +57,19 @@ export function createApp() {
   // Explicit rather than relying on body-parser's 100kb default — a report
   // carries a full DiagnosticResult[] and this cap should be a decision,
   // not an accident. Raise deliberately if real test payloads approach it.
-  app.use(express.json({ limit: "256kb" }));
+  //
+  // verify captures the raw bytes onto req.rawBody before JSON-parsing
+  // them — billing.ts's Stripe webhook route needs the EXACT original
+  // body to check Stripe's signature; re-serializing the parsed JSON
+  // would not reproduce byte-for-byte what Stripe actually signed.
+  app.use(
+    express.json({
+      limit: "256kb",
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+      },
+    }),
+  );
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
@@ -75,6 +88,7 @@ export function createApp() {
   app.use("/settings", orgSettingsRoutes);
   app.use("/", integrationsRoutes);
   app.use("/", ssoRoutes);
+  app.use("/billing", billingRoutes);
   // Read-only, API-key-authenticated surface for external integrations —
   // mounted under its own prefix for the same reason /public/track is:
   // "is this route authenticated by a portal session?" is answerable

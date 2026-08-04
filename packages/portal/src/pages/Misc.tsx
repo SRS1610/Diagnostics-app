@@ -6,6 +6,7 @@
 import { useState } from "react";
 import {
   api,
+  ApiError,
   type ActivityLogEntry,
   type License,
   type MfaConfirmResponse,
@@ -30,7 +31,10 @@ export function BillingPage() {
   const canProvision = role !== "tenant_staff";
   const { data, loading, error, reload } = useApi(() => api.get<License[]>("/licenses"));
   const licenses = data ?? [];
-  const active = licenses.find((l) => l.status === "active");
+  // past_due is included here alongside active — a license with a
+  // failed-but-retrying renewal payment is still THE current one for
+  // display purposes; it just also gets the warning banner below.
+  const active = licenses.find((l) => l.status === "active" || l.status === "past_due");
 
   return (
     <>
@@ -64,6 +68,14 @@ export function BillingPage() {
         </div>
       )}
 
+      {active?.status === "past_due" && (
+        <div className="error-box" style={{ marginBottom: 16 }}>
+          The most recent renewal payment failed. Stripe will retry automatically — update the payment method via
+          "Manage billing" below if it keeps failing.
+        </div>
+      )}
+
+      {canProvision && <SelfServeBilling />}
       {canProvision && <NewLicenseForm onProvisioned={reload} />}
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -100,6 +112,79 @@ export function BillingPage() {
         is not integrated. Amounts on generated invoices use placeholder plan pricing and are not billable as-is.
       </p>
     </>
+  );
+}
+
+/** Self-serve checkout via Stripe, alongside (not replacing) the manual
+ *  "New Licence" form below — a sales-assisted deal still goes through
+ *  an admin provisioning it directly. If Stripe isn't configured for
+ *  this deployment, the API refuses with 501 and this section says so
+ *  plainly rather than showing a button that can only fail. */
+function SelfServeBilling() {
+  const [planType, setPlanType] = useState<string>(LICENSE_TYPES[0].value);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
+
+  const checkout = async () => {
+    setError(null);
+    setBusy("checkout");
+    try {
+      const res = await api.post<{ checkoutUrl: string }>("/billing/checkout-session", { type: planType });
+      window.location.href = res.checkoutUrl;
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 501
+          ? "Self-serve checkout isn't set up for this deployment yet — use the manual form below, or contact support."
+          : err instanceof Error
+            ? err.message
+            : "Could not start checkout",
+      );
+      setBusy(null);
+    }
+  };
+
+  const manageBilling = async () => {
+    setError(null);
+    setBusy("portal");
+    try {
+      const res = await api.post<{ url: string }>("/billing/portal-session");
+      window.location.href = res.url;
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 404
+          ? "No billing history yet — check out a plan first."
+          : err instanceof ApiError && err.status === 501
+            ? "Self-serve billing isn't set up for this deployment yet."
+            : err instanceof Error
+              ? err.message
+              : "Could not open the billing portal",
+      );
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Self-serve billing</h2>
+      {error && <div className="error-box">{error}</div>}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <select className="input" style={{ width: "auto" }} value={planType} onChange={(e) => setPlanType(e.target.value)}>
+          {LICENSE_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
+        </select>
+        <button className="btn" disabled={busy !== null} onClick={() => void checkout()}>
+          {busy === "checkout" ? "Redirecting…" : "Check out with Stripe"}
+        </button>
+        <button className="btn btn-secondary" disabled={busy !== null} onClick={() => void manageBilling()}>
+          {busy === "portal" ? "Redirecting…" : "Manage billing"}
+        </button>
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
+        Checkout replaces this organization's current active licence, same as provisioning one manually below. "Manage
+        billing" opens Stripe's own portal for payment methods, invoices, and cancellation.
+      </p>
+    </div>
   );
 }
 

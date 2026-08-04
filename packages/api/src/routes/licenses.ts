@@ -24,7 +24,7 @@ import { prisma } from "../lib/prisma";
 
 const router = Router();
 
-const VALID_LICENSE_TYPES: LicenseType[] = [
+export const VALID_LICENSE_TYPES: LicenseType[] = [
   "per_inspection",
   "seat_subscription",
   "tiered_subscription",

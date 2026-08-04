@@ -105,7 +105,7 @@ export function StatusBadge({ status }: { status: string }) {
       ? "badge-pass"
       : status === "fail" || status === "suspended" || status === "failed"
         ? "badge-fail"
-        : status === "pass_with_warnings" || status === "warning" || status === "awaiting_review"
+        : status === "pass_with_warnings" || status === "warning" || status === "awaiting_review" || status === "past_due"
           ? "badge-warn"
           : "badge-neutral";
   return <span className={`badge ${cls}`}>{status.replace(/_/g, " ")}</span>;
