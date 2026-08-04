@@ -41,6 +41,7 @@ import batchesRoutes from "./routes/batches";
 import listingsRoutes from "./routes/listings";
 import publicTrackerRoutes from "./routes/publicTracker";
 import usersRoutes from "./routes/users";
+import complianceRoutes from "./routes/compliance";
 
 export function createApp() {
   const app = express();
@@ -66,6 +67,7 @@ export function createApp() {
   app.use("/technicians", techniciansRoutes);
   app.use("/users", usersRoutes);
   app.use("/activity-log", activityLogRoutes);
+  app.use("/compliance", complianceRoutes);
   app.use("/disputes", disputesRoutes);
   app.use("/warranty-claims", warrantyClaimsRoutes);
   app.use("/invoices", invoicesRoutes);

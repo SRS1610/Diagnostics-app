@@ -172,7 +172,10 @@ export function Pager({
   const atEnd = offset + limit >= total;
 
   return (
-    <div className="row-between" style={{ marginTop: 12 }}>
+    // Its own class, not just row-between: that layout class is used all
+    // over the portal, so anything selecting by it alone (a test, a
+    // style tweak) picks whichever one happens to come first.
+    <div className="pager row-between" style={{ marginTop: 12 }}>
       <span className="muted" style={{ fontSize: 13 }}>
         {first}–{last} of {total}
       </span>

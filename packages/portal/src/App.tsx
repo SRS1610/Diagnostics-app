@@ -25,6 +25,7 @@ import { ProfilesPage } from "./pages/Profiles";
 import { DisputesPage } from "./pages/Disputes";
 import { ActivityLogPage, BillingPage, SettingsPage, TeamPage } from "./pages/Misc";
 import { ChangePasswordPage } from "./pages/ChangePassword";
+import { CompliancePage } from "./pages/Compliance";
 
 function TenantRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, viewingTenantId, mustChangePassword } = useSession();
@@ -88,6 +89,7 @@ export default function App() {
       <Route path="/devices/:deviceKey" element={<TenantRoute><DeviceHistoryPage /></TenantRoute>} />
       <Route path="/profiles" element={<TenantRoute><ProfilesPage /></TenantRoute>} />
       <Route path="/disputes" element={<TenantRoute><DisputesPage /></TenantRoute>} />
+      <Route path="/compliance" element={<TenantRoute><CompliancePage /></TenantRoute>} />
       <Route path="/billing" element={<TenantRoute><BillingPage /></TenantRoute>} />
       <Route path="/team" element={<TenantRoute><TeamPage /></TenantRoute>} />
       <Route path="/activity" element={<TenantRoute><ActivityLogPage /></TenantRoute>} />

@@ -25,6 +25,12 @@ declare module "express-serve-static-core" {
       userId: string;
       role: "master_admin" | "tenant_admin" | "tenant_staff";
       viewingTenantId: string | null;
+      /** The tenant this user BELONGS to, read fresh from their own row
+       *  by requireAuth. Kept separate from viewingTenantId so the check
+       *  below has an independent value to compare against — the two
+       *  differ legitimately only for a master_admin inside a tenant
+       *  view. */
+      ownTenantId: string | null;
     };
   }
 }
@@ -46,12 +52,19 @@ export function requireTenantScope(req: Request, res: Response, next: NextFuncti
   }
 
   // tenant_admin/tenant_staff can NEVER view a tenant other than their
-  // own — this check catches a forged/tampered viewingTenantId even if
-  // something upstream failed to enforce it.
-  if (
-    (session.role === "tenant_admin" || session.role === "tenant_staff") &&
-    session.viewingTenantId !== req.portalSession?.viewingTenantId
-  ) {
+  // own.
+  //
+  // This check previously compared session.viewingTenantId against
+  // req.portalSession.viewingTenantId — the same value, since `session`
+  // is an alias for it. It could not fire, so the file's most important
+  // safety net was dead code that read like protection. Found in review.
+  //
+  // It now compares against ownTenantId, which requireAuth reads from
+  // the user's own database row. That makes it a genuine independent
+  // assertion: if any future change lets a tenant user's viewingTenantId
+  // be set from a token claim or a request parameter, this catches the
+  // mismatch instead of waving it through.
+  if (session.role !== "master_admin" && session.viewingTenantId !== session.ownTenantId) {
     return res.status(403).json({ error: "Cannot access another tenant's data" });
   }
 

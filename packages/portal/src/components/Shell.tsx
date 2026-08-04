@@ -25,6 +25,7 @@ const TENANT_NAV = [
   { to: "/devices", label: "Devices" },
   { to: "/profiles", label: "Test Profiles" },
   { to: "/disputes", label: "Disputes" },
+  { to: "/compliance", label: "Compliance" },
   { to: "/billing", label: "Billing & Licenses" },
   { to: "/team", label: "Team" },
   { to: "/activity", label: "Activity Log" },

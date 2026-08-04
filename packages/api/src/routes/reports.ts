@@ -21,6 +21,7 @@ import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { requireTechnicianAuth, technicianTenantWhere } from "../middleware/technicianAuth";
 import { mintConsumerToken } from "../lib/consumerToken";
 import { parseDate, parseListWindow, parseSearch, setPaginationHeaders } from "../lib/pagination";
+import { csvDocument, csvFilename } from "../lib/csv";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -207,6 +208,127 @@ router.get("/", requireAuth, requireTenantScope, async (req, res) => {
 
   setPaginationHeaders(res, { total, limit, offset });
   res.json(reports);
+});
+
+/**
+ * CSV export of the inspection list.
+ *
+ * MOUNTED BEFORE /:reportId deliberately — Express matches in
+ * declaration order, so with this below, a request for "export.csv"
+ * would be read as a report whose id is "export.csv" and 404.
+ *
+ * Honours the same filters as the list, so what you export is what you
+ * were looking at rather than an unrelated dump. Capped: an export is a
+ * convenience, not a bulk-extraction channel, and building an unbounded
+ * string in memory is how a large tenant takes the process down.
+ *
+ * consumerToken is NOT a column. Each one lets its bearer act on a
+ * customer's offer, and a spreadsheet is the single most forwarded,
+ * least controlled artefact this system produces.
+ */
+router.get("/export.csv", requireAuth, requireTenantScope, async (req, res) => {
+  const search = parseSearch(req.query.q);
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+
+  const where: Prisma.ReportWhereInput = { ...tenantWhere(req) };
+  if (search) {
+    where.OR = [
+      { serialNumber: { contains: search, mode: "insensitive" } },
+      { imei: { contains: search, mode: "insensitive" } },
+      { deviceModel: { contains: search, mode: "insensitive" } },
+      { deviceMake: { contains: search, mode: "insensitive" } },
+    ];
+  }
+  if (typeof req.query.status === "string" && req.query.status) {
+    if (!OVERALL_STATUSES.has(req.query.status)) {
+      return res.status(400).json({ error: `status must be one of: ${[...OVERALL_STATUSES].join(", ")}` });
+    }
+    where.overallStatus = req.query.status;
+  }
+  if (from || to) {
+    where.generatedAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
+  }
+
+  const EXPORT_LIMIT = 5000;
+  const [total, reports] = await Promise.all([
+    prisma.report.count({ where }),
+    prisma.report.findMany({
+      where,
+      orderBy: { generatedAt: "desc" },
+      take: EXPORT_LIMIT,
+      select: {
+        reportId: true,
+        generatedAt: true,
+        deviceMake: true,
+        deviceModel: true,
+        serialNumber: true,
+        imei: true,
+        imei2: true,
+        captureSource: true,
+        overallStatus: true,
+        routing: true,
+        results: true,
+        technician: { select: { displayName: true } },
+        profile: { select: { customerName: true } },
+      },
+    }),
+  ]);
+
+  const rows = reports.map((r) => {
+    const results = Array.isArray(r.results) ? (r.results as Array<{ status?: string }>) : [];
+    return [
+      r.reportId,
+      r.generatedAt,
+      r.deviceMake,
+      r.deviceModel,
+      r.serialNumber,
+      r.imei,
+      r.imei2 ?? "",
+      r.captureSource,
+      r.overallStatus,
+      r.routing ?? "",
+      r.technician?.displayName ?? "",
+      r.profile?.customerName ?? "",
+      results.length,
+      results.filter((t) => t.status === "pass").length,
+      results.filter((t) => t.status === "fail" || t.status === "warning").length,
+    ];
+  });
+
+  // Truncation is stated IN the file, not just in a header nobody looks
+  // at — a spreadsheet that silently stops at 5,000 rows will be treated
+  // as complete by whoever opens it.
+  if (total > EXPORT_LIMIT) {
+    rows.push([]);
+    rows.push([
+      `TRUNCATED: ${total} inspections matched, ${EXPORT_LIMIT} exported (most recent first). Narrow the date range to export the rest.`,
+    ]);
+  }
+
+  res.type("text/csv").attachment(csvFilename("inspections", new Date()));
+  res.send(
+    csvDocument(
+      [
+        "Report ID",
+        "Inspected at",
+        "Make",
+        "Model",
+        "Serial number",
+        "IMEI",
+        "IMEI 2",
+        "Capture source",
+        "Outcome",
+        "Routing",
+        "Technician",
+        "Profile",
+        "Tests run",
+        "Tests passed",
+        "Tests flagged",
+      ],
+      rows,
+    ),
+  );
 });
 
 router.get("/:reportId", requireAuth, requireTenantScope, async (req, res) => {

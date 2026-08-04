@@ -54,6 +54,9 @@ npm run test:e2e --workspace=packages/portal
   moment the account is deactivated.
 - **`e2e/search-and-paging.mjs`** — searching by serial, filtering by
   outcome, and walking pages without repeating or skipping rows.
+- **`e2e/export-and-compliance.mjs`** — the compliance summary, and CSV
+  downloads actually producing a file with the right columns and the
+  filter that was on screen.
 - **`e2e/write-flows.mjs`** — the actions that CHANGE something, which
   the other two never touch: creating a tenant, suspending and
   reactivating it, creating a profile (and being refused a duplicate PIN

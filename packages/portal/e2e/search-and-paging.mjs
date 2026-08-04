@@ -28,7 +28,7 @@ await check("the reports list shows a page, not everything", async () => {
 });
 
 await check("it states the range and the true total", async () => {
-  const text = await page.textContent(".row-between");
+  const text = await page.textContent(".pager");
   // "1–25 of 70" — the total is what tells someone there is more.
   if (!/1–25 of \d{2,}/.test(text)) throw new Error(`unexpected pager text: "${text}"`);
 });
@@ -46,7 +46,7 @@ await check("Next moves to genuinely different rows", async () => {
 
 await check("Previous returns to where it started", async () => {
   await page.click('button:has-text("Previous")');
-  await page.waitForFunction(() => /^1–/.test(document.querySelector(".row-between")?.textContent ?? ""));
+  await page.waitForFunction(() => /^1–/.test(document.querySelector(".pager")?.textContent ?? ""));
 });
 
 await check("searching a serial finds exactly that device", async () => {
@@ -74,7 +74,7 @@ await check("changing a filter returns to the first page", async () => {
   // Otherwise an offset from the previous filter lands past the end of
   // the new one and reads as "no results".
   await page.click('button:has-text("All")');
-  await page.waitForFunction(() => /^1–/.test(document.querySelector(".row-between")?.textContent ?? ""));
+  await page.waitForFunction(() => /^1–/.test(document.querySelector(".pager")?.textContent ?? ""));
 });
 
 await check("the devices page can find a device by serial", async () => {

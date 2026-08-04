@@ -141,6 +141,20 @@ export const api = {
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body === undefined ? undefined : JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  /** For file downloads. An <a href> cannot carry the Authorization
+   *  header, and putting the token in a query string would write a live
+   *  credential into browser history and every proxy log on the way. */
+  getBlob: async (path: string): Promise<Blob> => {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
+    });
+    if (response.status === 401) {
+      onUnauthorized?.();
+      throw new ApiError("Your session has expired. Sign in again.", 401);
+    }
+    if (!response.ok) throw new ApiError(`Export failed (${response.status})`, response.status);
+    return response.blob();
+  },
 };
 
 // ============================================================

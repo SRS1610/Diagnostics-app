@@ -16,6 +16,7 @@ import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../src/app";
 import { Fixtures, prisma, resetDatabase, seedTwoTenants } from "./fixtures";
+import jwt from "jsonwebtoken";
 import { enterTenantView, portalLogin, technicianLogin, validReportBody } from "./helpers";
 
 let app: Express;
@@ -261,5 +262,89 @@ describe("a tenant cannot be deleted out from under its audit trail", () => {
     // that means master_admin.
     expect(user!.tenantId).toBe(fx.beta.tenantId);
     expect(user!.role).toBe("tenant_admin");
+  });
+});
+
+// The check in requireTenantScope that a tenant user's scope matches
+// their own tenant used to compare a value against itself, so it could
+// never fire — the file's most important safety net was dead code that
+// read like protection. Found in review. These prove the revived version
+// is load-bearing.
+describe("the tenant-scope guard is a real check, not a tautology", () => {
+  it("ignores a tampered viewingTenantId claim and serves the user's own tenant", async () => {
+    // A token minted by hand, pointing a tenant_admin at the OTHER
+    // tenant. This is the outer defence: requireAuth re-derives the
+    // scope from the user's own row before the guard is ever consulted,
+    // so the request SUCCEEDS — with alpha's data, not beta's. The
+    // status is not the assertion; whose rows come back is.
+    const alphaUser = await prisma.portalUser.findFirst({ where: { email: fx.alpha.adminEmail } });
+    const forged = jwt.sign(
+      {
+        kind: "portal",
+        userId: alphaUser!.userId,
+        role: "tenant_admin",
+        tenantId: fx.alpha.tenantId,
+        viewingTenantId: fx.beta.tenantId,
+      },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "1h" },
+    );
+
+    const res = await request(app).get("/reports").set("Authorization", `Bearer ${forged}`);
+    expect(res.status).toBe(200);
+    for (const row of res.body) expect(row.tenantId).toBe(fx.alpha.tenantId);
+    expect(JSON.stringify(res.body)).not.toContain(fx.beta.tenantId);
+  });
+
+  it("fires if a drifted session ever reaches it", async () => {
+    // The inner defence, exercised directly. It cannot be reached
+    // through HTTP while requireAuth is correct — which is the whole
+    // point of a second layer — so it is called with the session a
+    // regression in requireAuth would produce. Before this fix the same
+    // call fell straight through, because the check compared a value
+    // against itself.
+    const { requireTenantScope } = await import("../src/middleware/tenantScope");
+
+    const drifted = {
+      portalSession: {
+        userId: "u1",
+        role: "tenant_admin" as const,
+        viewingTenantId: fx.beta.tenantId,
+        ownTenantId: fx.alpha.tenantId,
+      },
+    };
+
+    let status = 0;
+    let nextCalled = false;
+    const res = {
+      status(code: number) {
+        status = code;
+        return this;
+      },
+      json() {
+        return this;
+      },
+    };
+
+    requireTenantScope(drifted as never, res as never, () => {
+      nextCalled = true;
+    });
+
+    expect(status).toBe(403);
+    expect(nextCalled).toBe(false);
+  });
+
+  it("still lets a master_admin legitimately view another tenant", async () => {
+    // The one case where viewingTenantId and ownTenantId differ by
+    // design — the check must not break support access.
+    const master = await portalLogin(app, fx.masterEmail);
+    const entered = await request(app)
+      .post("/auth/enter-tenant-view")
+      .set("Authorization", `Bearer ${master}`)
+      .send({ tenantId: fx.alpha.tenantId });
+
+    expect(entered.status).toBe(200);
+    const scoped = await request(app).get("/reports").set("Authorization", `Bearer ${entered.body.token}`);
+    expect(scoped.status).toBe(200);
   });
 });

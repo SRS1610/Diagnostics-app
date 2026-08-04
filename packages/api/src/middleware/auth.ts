@@ -76,6 +76,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       userId: user.userId,
       role: user.role as "master_admin" | "tenant_admin" | "tenant_staff",
       viewingTenantId,
+      // Carried separately so requireTenantScope can cross-check the
+      // scope against where this user actually belongs, rather than
+      // against itself.
+      ownTenantId: user.tenantId,
     };
     next();
   } catch {

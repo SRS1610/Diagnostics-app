@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type DiagnosticResult, type Report } from "../api/client";
 import { AsyncBoundary, Pager, StatusBadge, formatDate, useApi, useDebounced } from "../components/common";
+import { DownloadButton } from "./Compliance";
 
 // Where the consumer app is deployed. Deliberately a SEPARATE origin
 // from this portal: a consumer page and a staff session must never share
@@ -56,8 +57,23 @@ export function ReportsPage() {
 
   return (
     <>
-      <h1 className="page-title">Reports</h1>
-      <p className="page-sub">Every inspection for this tenant</p>
+      <div className="row-between">
+        <div>
+          <h1 className="page-title">Reports</h1>
+          <p className="page-sub">Every inspection for this tenant</p>
+        </div>
+        {/* Exports what is currently on screen, filters and all — an
+            export that ignores the filters is a different question's
+            answer. */}
+        <DownloadButton
+          path={`/reports/export.csv?${new URLSearchParams({
+            ...(search ? { q: search } : {}),
+            ...(status ? { status } : {}),
+          })}`}
+          filename="inspections.csv"
+          label="Export CSV"
+        />
+      </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="field" style={{ marginBottom: 10 }}>
