@@ -22,6 +22,59 @@ Seeded logins (see `packages/api/prisma/seed.ts`):
 | `master@platform.com`    | master_admin | Master Console |
 | `admin@acmewireless.com` | tenant_admin | Dashboard      |
 
+## Testing
+
+```bash
+# 1. API (needs Postgres running and the database seeded)
+npm run dev --workspace=packages/api
+
+# 2. the portal, BUILT — not the dev server
+npm run build   --workspace=packages/portal
+npm run preview --workspace=packages/portal   # http://localhost:4173
+
+# 3. the checks
+npm run test:e2e --workspace=packages/portal
+```
+
+`test:e2e` runs two suites, and they check different things:
+
+- **`e2e/smoke.mjs`** — does it work? Login, the Master Console, entering
+  and leaving a tenant, all nine tenant-scoped pages loading with the
+  right heading and the right tenant badge, opening a report and a device
+  history, and a session surviving a full page reload.
+- **`e2e/failure-modes.mjs`** — does it lie when things break? Requests
+  are made to fail, 401, and 500, and the checks assert the portal says
+  so: no fabricated zeroes on stat tiles, no error rendered as an empty
+  state, no blank screen on an expired session.
+
+Run them against the **built bundle**, not `npm run dev`. That is what
+ships, and it is where the session bug appeared.
+
+Both suites exist because the portal's worst failures pass a type-check
+and a unit test cleanly. The session bug that logged users out on every
+refresh built without a warning. The dashboard that reported a failed
+fetch as "0 disputes awaiting review" was correct TypeScript rendering a
+false claim. Catching either needs a browser, a live API, and an
+assertion about what a human would actually read.
+
+Useful environment variables: `PORTAL_URL`, `API_URL`, `MASTER_EMAIL`,
+`TENANT_EMAIL`, `PORTAL_PASSWORD`, `TENANT_NAME`, `CHROMIUM_PATH`,
+`E2E_TIMEOUT`. A failing check writes a screenshot to `/tmp` and names it
+in the output.
+
+### Testing it by hand
+
+Sign in as `master@platform.com / changeme123` for the Master Console, or
+`admin@acmewireless.com / changeme123` to land straight in a tenant.
+Worth trying deliberately, since automated checks tend not to:
+
+- Stop the API and reload a page. Nothing should claim a count of zero;
+  tiles should read "—".
+- Enter a tenant, then open a second tab and enter a different one. Each
+  tab keeps its own scope; the badge must always match the data.
+- Open a report detail and press "Show link" — that URL is a capability,
+  and should stay hidden until asked for.
+
 ## Why a client-rendered SPA and not Next.js
 
 The scaffold's `package.json` originally declared Next.js. This is a Vite
