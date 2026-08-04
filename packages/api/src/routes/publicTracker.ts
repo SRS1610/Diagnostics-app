@@ -47,6 +47,7 @@ import { Prisma } from "@prisma/client";
 import rateLimit from "express-rate-limit";
 import { looksLikeConsumerToken } from "../lib/consumerToken";
 import { prisma } from "../lib/prisma";
+import { dispatchWebhook } from "../lib/webhooks";
 
 const router = Router();
 
@@ -401,7 +402,7 @@ router.post("/:token/dispute", publicWriteRateLimit, async (req, res) => {
     return res.status(409).json({ error: "You already have a review request open on this device." });
   }
 
-  await prisma.dispute.create({
+  const dispute = await prisma.dispute.create({
     data: {
       // From the report the token unlocked — the only place these can
       // come from on an unauthenticated route.
@@ -412,6 +413,12 @@ router.post("/:token/dispute", publicWriteRateLimit, async (req, res) => {
       status: OPEN_DISPUTE,
     },
   });
+
+  void dispatchWebhook(report.tenantId, "dispute.received", {
+    disputeId: dispute.disputeId,
+    reportId: report.reportId,
+    disputingItem: dispute.disputingItem,
+  }).catch((e) => console.error(`Webhook dispatch failed for dispute ${dispute.disputeId}:`, e));
 
   const refreshed = await loadByToken(req.params.token);
   res.status(201).json(await buildTrackerView(refreshed!));

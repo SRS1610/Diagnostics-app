@@ -13,6 +13,11 @@ export type ActivityAction =
   // Portal auth
   | "portal_login"
   | "portal_password_changed"
+  | "portal_mfa_enabled"
+  | "portal_mfa_disabled"
+  | "api_key_created"
+  | "api_key_revoked"
+  | "webhook_created"
   | "portal_logout"
   | "entered_tenant_view"
   | "exited_tenant_view"

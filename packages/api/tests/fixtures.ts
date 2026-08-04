@@ -58,6 +58,13 @@ export async function resetDatabase(): Promise<void> {
   await prisma.customerProfile.deleteMany();
   await prisma.portalUser.deleteMany();
   await prisma.dispute.deleteMany();
+  // webhookDelivery cascades from webhookEndpoint automatically, but
+  // webhookEndpoint and apiKey are both RESTRICT against Tenant (see
+  // schema comments — a leaked credential must not become impossible to
+  // audit just because someone deleted the tenant), so they need
+  // clearing explicitly before the tenant delete below.
+  await prisma.webhookEndpoint.deleteMany();
+  await prisma.apiKey.deleteMany();
   await prisma.tenant.deleteMany();
 }
 

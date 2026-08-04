@@ -32,6 +32,7 @@ const TENANT_NAV = [
   { to: "/billing", label: "Billing & Licenses" },
   { to: "/invoices", label: "Invoices" },
   { to: "/team", label: "Team" },
+  { to: "/integrations", label: "Integrations" },
   { to: "/activity", label: "Activity Log" },
   { to: "/settings", label: "Settings" },
 ];

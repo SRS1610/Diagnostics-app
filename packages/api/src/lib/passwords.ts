@@ -61,3 +61,18 @@ export function generateTemporaryPassword(length = 16): string {
 export function generateResetToken(): string {
   return randomBytes(32).toString("base64url");
 }
+
+// Digits only, and grouped, so a backup code is easy to write down and
+// re-type by hand — the scenario it exists for is "my phone with the
+// authenticator app is gone", which is not a moment to also be fighting
+// a mixed-case alphabet on a support call.
+export function generateBackupCode(): string {
+  let out = "";
+  for (let i = 0; i < 10; i += 1) out += randomInt(10);
+  return `${out.slice(0, 5)}-${out.slice(5)}`;
+}
+
+/** Ten single-use recovery codes, only shown once. */
+export function generateBackupCodes(count = 10): string[] {
+  return Array.from({ length: count }, generateBackupCode);
+}

@@ -55,6 +55,8 @@ model Tenant {
   marketPrices MarketPriceEntry[]
   quotes       TradeInQuote[]
   batches      BatchSession[]
+  apiKeys      ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
 
   @@map("tenants")
 }
@@ -144,9 +146,36 @@ model PortalUser {
   tenant       Tenant?  @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
   createdAt    DateTime @default(now())
 
+  // TOTP MFA (RFC 6238). mfaSecret is set at enrollment and is only
+  // trusted once mfaEnabled flips true — an unconfirmed secret from an
+  // abandoned enrollment attempt must not silently protect the account,
+  // and must not silently BE bypassable either, so login checks
+  // mfaEnabled, never "is mfaSecret set".
+  mfaEnabled    Boolean   @default(false)
+  mfaSecret     String?
+  mfaEnrolledAt DateTime?
+
   passwordResets PasswordResetToken[]
+  mfaBackupCodes MfaBackupCode[]
 
   @@map("portal_users")
+}
+
+/// A one-time MFA recovery code, same shape as PasswordResetToken and
+/// for the same reason: only the hash is stored, so a database dump
+/// cannot be used to bypass MFA on every account in it. Ten are minted
+/// at enrollment and shown exactly once — losing the authenticator app
+/// without one of these is a support ticket, not a way back in.
+model MfaBackupCode {
+  codeId    String    @id @default(cuid())
+  userId    String
+  user      PortalUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("mfa_backup_codes")
 }
 
 /// A one-time password reset.
@@ -445,4 +474,82 @@ model BatchSession {
   closedAt      DateTime?
 
   @@map("batch_sessions")
+}
+
+// ============================================================
+// API keys — programmatic, tenant-scoped, READ-ONLY access
+// ============================================================
+//
+// A B2B integration credential, deliberately narrower than a portal
+// session: it authenticates a SERVER, not a person, so it gets none of
+// the write actions a logged-in admin has (no creating profiles,
+// resolving disputes, changing settings). Read-only is the safe default
+// for a credential that might end up in a partner's server logs or a
+// misconfigured client — the blast radius of a leaked key is "someone
+// can read this tenant's reports", not "someone can act as an admin".
+model ApiKey {
+  keyId     String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [tenantId])
+  name      String
+  // Only the hash is stored, same reasoning as PasswordResetToken — the
+  // full key is shown exactly once, at creation.
+  keyHash   String    @unique
+  // First 12 characters of the real key, kept in the clear so a list
+  // view can show "dgk_live_a1b2c3..." for identification without ever
+  // being able to reconstruct the full key from it.
+  keyPrefix String
+  createdByUserId String
+  createdAt DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt DateTime?
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+// ============================================================
+// Webhooks — outbound event delivery
+// ============================================================
+model WebhookEndpoint {
+  endpointId String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [tenantId])
+  url        String
+  // Signs every delivery (see lib/webhooks.ts) so a receiver can verify
+  // a payload actually came from this platform and was not forged or
+  // replayed from a different endpoint's traffic. Shown once, at
+  // creation, same as an API key.
+  secret     String
+  // Which event types this endpoint wants. An endpoint created for
+  // "report_created" should not also receive "dispute_resolved" traffic
+  // it never asked for and may not be built to handle.
+  eventTypes String[]
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId])
+  @@map("webhook_endpoints")
+}
+
+/// A delivery ATTEMPT, kept regardless of outcome. Without a record of
+/// failures, "is my webhook actually working" is a question only the
+/// receiving end can answer — and a receiver that silently stopped
+/// accepting deliveries would have no way to tell the sender that from
+/// this side otherwise.
+model WebhookDelivery {
+  deliveryId String   @id @default(cuid())
+  endpointId String
+  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [endpointId], onDelete: Cascade)
+  eventType  String
+  payload    Json
+  statusCode Int?
+  succeeded  Boolean
+  error      String?
+  attemptedAt DateTime @default(now())
+
+  @@index([endpointId])
+  @@map("webhook_deliveries")
 }

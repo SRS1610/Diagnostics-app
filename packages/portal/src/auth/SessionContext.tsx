@@ -16,7 +16,14 @@
 // tenant is in scope.
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, setAuthToken, setUnauthorizedHandler, type LoginResponse, type PortalRole } from "../api/client";
+import {
+  api,
+  setAuthToken,
+  setUnauthorizedHandler,
+  type LoginResponse,
+  type MfaRequiredResponse,
+  type PortalRole,
+} from "../api/client";
 
 const STORAGE_KEY = "diagnostics.portal.session";
 
@@ -35,7 +42,12 @@ interface StoredSession {
 
 interface SessionContextValue extends Partial<StoredSession> {
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<PortalRole>;
+  /** Resolves to the role on a direct sign-in, or an MFA-pending token
+   *  when the account requires a second factor — the caller (Login page)
+   *  is what decides what to render for each case. */
+  login: (email: string, password: string) => Promise<{ role: PortalRole } | MfaRequiredResponse>;
+  /** Completes an MFA-gated sign-in with a TOTP or backup code. */
+  verifyMfa: (mfaToken: string, code: string) => Promise<PortalRole>;
   logout: () => void;
   enterTenantView: (tenantId: string, companyName: string) => Promise<void>;
   exitTenantView: () => Promise<void>;
@@ -80,13 +92,32 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await api.post<LoginResponse>("/auth/login", { email, password });
+    const res = await api.post<LoginResponse | MfaRequiredResponse>("/auth/login", { email, password });
+    if ("mfaRequired" in res) {
+      // No session is established yet — the pending token proves the
+      // password but requireAuth rejects it outright (kind !== "portal"),
+      // so nothing is reachable until verifyMfa completes the login.
+      return res;
+    }
     setSession({
       token: res.token,
       email: res.user.email,
       role: res.user.role,
       // Tenant users land in their own tenant; a master_admin lands
       // with no tenant in scope and must enter one explicitly.
+      viewingTenantId: res.user.tenantId,
+      viewingTenantName: null,
+      mustChangePassword: Boolean(res.user.mustChangePassword),
+    });
+    return { role: res.user.role };
+  }, []);
+
+  const verifyMfa = useCallback(async (mfaToken: string, code: string) => {
+    const res = await api.post<LoginResponse>("/auth/mfa/verify", { mfaToken, code });
+    setSession({
+      token: res.token,
+      email: res.user.email,
+      role: res.user.role,
       viewingTenantId: res.user.tenantId,
       viewingTenantName: null,
       mustChangePassword: Boolean(res.user.mustChangePassword),
@@ -115,13 +146,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       ...session,
       isAuthenticated: Boolean(session?.token),
       login,
+      verifyMfa,
       logout,
       enterTenantView,
       exitTenantView,
       clearMustChangePassword,
       mustChangePassword: Boolean(session?.mustChangePassword),
     }),
-    [session, login, logout, enterTenantView, exitTenantView, clearMustChangePassword],
+    [session, login, verifyMfa, logout, enterTenantView, exitTenantView, clearMustChangePassword],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

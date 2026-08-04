@@ -12,7 +12,8 @@ import rateLimit from "express-rate-limit";
 import { createHash } from "node:crypto";
 import { requireAuth, requireMasterAdmin } from "../middleware/auth";
 import { buildActivityLogData } from "../lib/activityLog";
-import { generateResetToken, validatePassword } from "../lib/passwords";
+import { generateBackupCodes, generateResetToken, validatePassword } from "../lib/passwords";
+import { generateTotpSecret, totpEnrollmentUri, verifyTotpCode } from "../lib/totp";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
@@ -38,6 +39,19 @@ router.post("/login", async (req, res) => {
 
   const viewingTenantId = user.tenantId; // tenant users land in their own tenant;
                                           // master_admin lands with null (Master Console)
+
+  // MFA gate. Password verified above is only the FIRST factor once
+  // mfaEnabled is set — the real portal session token is not issued
+  // until /auth/mfa/verify confirms the second one. What's returned here
+  // instead is a short-lived, narrowly-scoped token that requireAuth
+  // rejects outright (kind !== "portal"), so it cannot be used to reach
+  // any tenant-scoped route by mistake or on purpose.
+  if (user.mfaEnabled) {
+    const mfaToken = jwt.sign({ kind: "portal_mfa_pending", userId: user.userId }, JWT_SECRET, {
+      expiresIn: "5m",
+    });
+    return res.json({ mfaRequired: true, mfaToken });
+  }
 
   const token = jwt.sign(
     { kind: "portal", userId: user.userId, role: user.role, tenantId: user.tenantId, viewingTenantId },
@@ -76,6 +90,211 @@ router.post("/login", async (req, res) => {
     },
   });
 });
+
+// ============================================================
+// MFA (TOTP, RFC 6238)
+// ============================================================
+
+// Brute-forcing a 6-digit TOTP code is 1,000,000 guesses; a tight limit
+// is the only thing standing between that and this endpoint, since the
+// pending token alone is not a secret worth much (it identifies a user
+// who has already proven their password).
+const mfaVerifyRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.MFA_VERIFY_RATE_LIMIT ?? 8),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts. Try again later." },
+});
+
+/** Completes login for an MFA-enabled account: the pending token from
+ *  /login plus a 6-digit code (or a backup code) issues the real
+ *  session token. */
+router.post("/mfa/verify", mfaVerifyRateLimit, async (req, res) => {
+  const { mfaToken, code } = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof mfaToken !== "string" || typeof code !== "string") {
+    return res.status(400).json({ error: "mfaToken and code are required" });
+  }
+
+  let decoded: { userId?: string; kind?: string };
+  try {
+    decoded = jwt.verify(mfaToken, JWT_SECRET) as typeof decoded;
+  } catch {
+    return res.status(401).json({ error: "This login attempt has expired. Sign in again." });
+  }
+  if (decoded.kind !== "portal_mfa_pending" || !decoded.userId) {
+    return res.status(401).json({ error: "Invalid login attempt" });
+  }
+
+  const user = await prisma.portalUser.findUnique({ where: { userId: decoded.userId } });
+  // Deactivated or MFA disabled between /login and here — a narrow
+  // window, but a real one, and re-checked rather than assumed.
+  if (!user || !user.active || !user.mfaEnabled || !user.mfaSecret) {
+    return res.status(401).json({ error: "Invalid login attempt" });
+  }
+
+  const totpOk = verifyTotpCode(user.mfaSecret, code);
+  const backupOk = totpOk ? false : await tryConsumeBackupCode(user.userId, code);
+  if (!totpOk && !backupOk) {
+    return res.status(401).json({ error: "Incorrect code" });
+  }
+
+  const token = jwt.sign(
+    { kind: "portal", userId: user.userId, role: user.role, tenantId: user.tenantId, viewingTenantId: user.tenantId },
+    JWT_SECRET,
+    { expiresIn: "12h" },
+  );
+
+  await prisma.activityLogEntry.create({
+    data: buildActivityLogData({
+      tenantId: user.tenantId,
+      actorUserId: user.userId,
+      actorRole: user.role as any,
+      action: "portal_login",
+      targetType: "session",
+      targetId: user.userId,
+      details: `${user.email} logged in${backupOk ? " (via MFA backup code)" : " (via MFA)"}`,
+    }),
+  });
+  await prisma.portalUser.update({ where: { userId: user.userId }, data: { lastLoginAt: new Date() } });
+
+  res.json({
+    token,
+    user: {
+      userId: user.userId,
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+      mustChangePassword: user.mustChangePassword,
+    },
+    // Surfaced so the portal can nudge "you're down to N backup codes" —
+    // silently running out is how someone locks themselves out for real.
+    ...(backupOk ? { backupCodesRemaining: await countRemainingBackupCodes(user.userId) } : {}),
+  });
+});
+
+/** Starts enrollment: generates a secret and returns it (plus the
+ *  otpauth:// URI to render as a QR code) but does NOT enable MFA yet —
+ *  see the schema comment on mfaEnabled for why an unconfirmed secret
+ *  must not protect the account. */
+router.post("/mfa/enroll", requireAuth, async (req, res) => {
+  const user = await prisma.portalUser.findUnique({ where: { userId: req.portalSession!.userId } });
+  if (!user) return res.status(401).json({ error: "Session is no longer valid" });
+  if (user.mfaEnabled) return res.status(409).json({ error: "MFA is already enabled on this account" });
+
+  const secret = generateTotpSecret();
+  await prisma.portalUser.update({ where: { userId: user.userId }, data: { mfaSecret: secret } });
+
+  res.json({ secret, otpauthUri: totpEnrollmentUri(secret, user.email) });
+});
+
+/** Confirms enrollment with a code from the app, which is what actually
+ *  flips mfaEnabled — proves the secret was successfully scanned/entered
+ *  before it becomes the thing guarding the account. */
+router.post("/mfa/confirm", requireAuth, async (req, res) => {
+  const { code } = (req.body ?? {}) as Record<string, unknown>;
+  const user = await prisma.portalUser.findUnique({ where: { userId: req.portalSession!.userId } });
+  if (!user) return res.status(401).json({ error: "Session is no longer valid" });
+  if (user.mfaEnabled) return res.status(409).json({ error: "MFA is already enabled on this account" });
+  if (!user.mfaSecret) return res.status(409).json({ error: "Start enrollment first with /auth/mfa/enroll" });
+  if (typeof code !== "string" || !verifyTotpCode(user.mfaSecret, code)) {
+    return res.status(400).json({ error: "Incorrect code" });
+  }
+
+  const backupCodes = generateBackupCodes();
+  await prisma.$transaction([
+    prisma.portalUser.update({
+      where: { userId: user.userId },
+      data: { mfaEnabled: true, mfaEnrolledAt: new Date() },
+    }),
+    prisma.mfaBackupCode.createMany({
+      data: await Promise.all(
+        backupCodes.map(async (c) => ({ userId: user.userId, codeHash: await bcrypt.hash(c, 10) })),
+      ),
+    }),
+  ]);
+
+  await prisma.activityLogEntry.create({
+    data: buildActivityLogData({
+      tenantId: user.tenantId,
+      actorUserId: user.userId,
+      actorRole: user.role as any,
+      action: "portal_mfa_enabled",
+      targetType: "portal_user",
+      targetId: user.userId,
+      details: `${user.email} enabled MFA`,
+    }),
+  });
+
+  res.json({
+    backupCodes,
+    note: "Store these somewhere safe — this is the only time they are shown. Each works once, in place of a code from your app.",
+  });
+});
+
+/** Turning MFA off requires the current password AND a valid code —
+ *  the same "an unattended session shouldn't be enough" reasoning as
+ *  change-password, doubled: this is the control being removed. */
+router.post("/mfa/disable", requireAuth, async (req, res) => {
+  const { currentPassword, code } = (req.body ?? {}) as Record<string, unknown>;
+  const user = await prisma.portalUser.findUnique({ where: { userId: req.portalSession!.userId } });
+  if (!user) return res.status(401).json({ error: "Session is no longer valid" });
+  if (!user.mfaEnabled) return res.status(409).json({ error: "MFA is not enabled on this account" });
+
+  if (typeof currentPassword !== "string" || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    return res.status(401).json({ error: "Current password is incorrect" });
+  }
+  const totpOk = typeof code === "string" && user.mfaSecret && verifyTotpCode(user.mfaSecret, code);
+  const backupOk = totpOk ? false : typeof code === "string" && (await tryConsumeBackupCode(user.userId, code));
+  if (!totpOk && !backupOk) {
+    return res.status(400).json({ error: "Incorrect code" });
+  }
+
+  await prisma.$transaction([
+    prisma.portalUser.update({
+      where: { userId: user.userId },
+      data: { mfaEnabled: false, mfaSecret: null, mfaEnrolledAt: null },
+    }),
+    // Unused backup codes for a disabled MFA setup are dead weight and,
+    // if MFA is re-enabled later, must not still work against the NEW
+    // secret's setup — a clean slate each time.
+    prisma.mfaBackupCode.deleteMany({ where: { userId: user.userId } }),
+  ]);
+
+  await prisma.activityLogEntry.create({
+    data: buildActivityLogData({
+      tenantId: user.tenantId,
+      actorUserId: user.userId,
+      actorRole: user.role as any,
+      action: "portal_mfa_disabled",
+      targetType: "portal_user",
+      targetId: user.userId,
+      details: `${user.email} disabled MFA`,
+    }),
+  });
+
+  res.status(204).send();
+});
+
+async function tryConsumeBackupCode(userId: string, code: string): Promise<boolean> {
+  const candidates = await prisma.mfaBackupCode.findMany({ where: { userId, usedAt: null } });
+  for (const candidate of candidates) {
+    if (await bcrypt.compare(code, candidate.codeHash)) {
+      // Conditional update: a code can be raced (two tabs submitting the
+      // same recovery code) and must not be usable twice.
+      const consumed = await prisma.mfaBackupCode.updateMany({
+        where: { codeId: candidate.codeId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      return consumed.count > 0;
+    }
+  }
+  return false;
+}
+
+async function countRemainingBackupCodes(userId: string): Promise<number> {
+  return prisma.mfaBackupCode.count({ where: { userId, usedAt: null } });
+}
 
 // ============================================================
 // Passwords

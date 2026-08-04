@@ -4,7 +4,16 @@
 // pages live in their own files.
 
 import { useState } from "react";
-import { api, type ActivityLogEntry, type License, type OrgSettings, type Technician } from "../api/client";
+import {
+  api,
+  type ActivityLogEntry,
+  type License,
+  type MfaConfirmResponse,
+  type MfaEnrollResponse,
+  type OrgSettings,
+  type PortalUser,
+  type Technician,
+} from "../api/client";
 import { useSession } from "../auth/SessionContext";
 import { AsyncBoundary, Pager, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
 import { UsersSection } from "./Users";
@@ -379,6 +388,249 @@ export function ActivityLogPage() {
 }
 
 // ============================================================
+// Security — MFA (TOTP) enrollment, shown on the Settings page.
+//
+// Per-account, not per-tenant — every portal user manages their own,
+// regardless of role. There is no /users/me: GET /users already returns
+// this account among the tenant's users (Users.tsx uses the same
+// "match by email" pattern for the "you" badge), so this reuses that
+// fetch instead of adding a new endpoint for one field.
+// ============================================================
+
+function SecuritySection() {
+  const { email: myEmail } = useSession();
+  const { data, loading, error, reload } = useApi(() => api.get<PortalUser[]>("/users"));
+  const me = data?.find((u) => u.email === myEmail);
+
+  const [stage, setStage] = useState<"idle" | "enrolling" | "confirming" | "showing-codes" | "disabling">("idle");
+  const [enrollment, setEnrollment] = useState<MfaEnrollResponse | null>(null);
+  const [confirmCode, setConfirmCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const startEnroll = async () => {
+    setFormError(null);
+    setBusy(true);
+    try {
+      const res = await api.post<MfaEnrollResponse>("/auth/mfa/enroll");
+      setEnrollment(res);
+      setStage("confirming");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Could not start enrollment");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setBusy(true);
+    try {
+      const res = await api.post<MfaConfirmResponse>("/auth/mfa/confirm", { code: confirmCode.trim() });
+      setBackupCodes(res.backupCodes);
+      setStage("showing-codes");
+      setConfirmCode("");
+      setEnrollment(null);
+      await reload();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Incorrect code");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setBusy(true);
+    try {
+      await api.post("/auth/mfa/disable", { currentPassword: disablePassword, code: disableCode.trim() });
+      setStage("idle");
+      setDisablePassword("");
+      setDisableCode("");
+      await reload();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Could not disable two-factor authentication");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Two-factor authentication</h2>
+
+      <AsyncBoundary loading={loading} error={error}>
+        {stage === "showing-codes" && backupCodes ? (
+          <div style={{ borderColor: "var(--accent)" }}>
+            <p style={{ margin: "0 0 8px" }}>
+              <strong>Two-factor authentication is enabled.</strong> Save these backup codes somewhere safe — each
+              works once, in place of a code from your app, and this is the only time they are shown.
+            </p>
+            <code
+              style={{
+                display: "block",
+                padding: 12,
+                background: "var(--panel-soft)",
+                borderRadius: 8,
+                fontSize: 14,
+                lineHeight: 1.8,
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {backupCodes.join("\n")}
+            </code>
+            <button className="btn" style={{ marginTop: 12 }} onClick={() => setStage("idle")}>
+              Done
+            </button>
+          </div>
+        ) : stage === "confirming" && enrollment ? (
+          <form onSubmit={confirmEnroll}>
+            {formError && <div className="error-box">{formError}</div>}
+            <p className="muted" style={{ fontSize: 13 }}>
+              Scan this into an authenticator app (Google Authenticator, 1Password, Authy…), or enter the secret
+              manually, then confirm with the 6-digit code it generates.
+            </p>
+            <div className="field">
+              <label>Setup key</label>
+              <code
+                style={{
+                  display: "block",
+                  padding: 10,
+                  background: "var(--panel-soft)",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  wordBreak: "break-all",
+                }}
+              >
+                {enrollment.secret}
+              </code>
+            </div>
+            <div className="field">
+              <label>otpauth:// URI</label>
+              <code
+                style={{
+                  display: "block",
+                  padding: 10,
+                  background: "var(--panel-soft)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  wordBreak: "break-all",
+                }}
+              >
+                {enrollment.otpauthUri}
+              </code>
+            </div>
+            <div className="field">
+              <label htmlFor="mfaconfirm">6-digit code</label>
+              <input
+                id="mfaconfirm"
+                className="input"
+                value={confirmCode}
+                onChange={(e) => setConfirmCode(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn" disabled={busy || !confirmCode.trim()}>
+                {busy ? "Confirming…" : "Confirm and enable"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setStage("idle");
+                  setEnrollment(null);
+                  setFormError(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : stage === "disabling" ? (
+          <form onSubmit={disable}>
+            {formError && <div className="error-box">{formError}</div>}
+            <p className="muted" style={{ fontSize: 13 }}>
+              Turning this off requires your current password and a valid code — the same "an unattended session
+              isn't enough" rule as changing your password, doubled, since this removes a control rather than just
+              changing one.
+            </p>
+            <div className="field">
+              <label htmlFor="mfadispw">Current password</label>
+              <input
+                id="mfadispw"
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                value={disablePassword}
+                onChange={(e) => setDisablePassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="mfadiscode">Code (app or backup)</label>
+              <input
+                id="mfadiscode"
+                className="input"
+                value={disableCode}
+                onChange={(e) => setDisableCode(e.target.value)}
+                required
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn" disabled={busy || !disablePassword || !disableCode.trim()}>
+                {busy ? "Disabling…" : "Disable two-factor authentication"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setStage("idle");
+                  setFormError(null);
+                  setDisablePassword("");
+                  setDisableCode("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            {formError && <div className="error-box">{formError}</div>}
+            <div className="row-between">
+              <span>
+                <StatusBadge status={me?.mfaEnabled ? "active" : "deactivated"} />{" "}
+                <span className="muted" style={{ fontSize: 13 }}>
+                  {me?.mfaEnabled
+                    ? "A code from your authenticator app is required at sign-in, in addition to your password."
+                    : "Not enabled. Add a second factor so a stolen password alone isn't enough to sign in."}
+                </span>
+              </span>
+              {me?.mfaEnabled ? (
+                <button className="btn btn-secondary" onClick={() => setStage("disabling")}>
+                  Disable
+                </button>
+              ) : (
+                <button className="btn" disabled={busy} onClick={() => void startEnroll()}>
+                  {busy ? "Starting…" : "Enable"}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </AsyncBoundary>
+    </div>
+  );
+}
+
+// ============================================================
 // Settings — admin_portal_settings.html
 // ============================================================
 
@@ -431,6 +683,8 @@ export function SettingsPage() {
     <>
       <h1 className="page-title">Settings</h1>
       <p className="page-sub">Organisation configuration</p>
+
+      <SecuritySection />
 
       <AsyncBoundary loading={loading} error={error}>
         {data && (

@@ -23,6 +23,7 @@ import { mintConsumerToken } from "../lib/consumerToken";
 import { parseDate, parseListWindow, parseSearch, setPaginationHeaders } from "../lib/pagination";
 import { csvDocument, csvFilename } from "../lib/csv";
 import { prisma } from "../lib/prisma";
+import { dispatchWebhook } from "../lib/webhooks";
 
 const router = Router();
 
@@ -489,6 +490,18 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
   } catch (e) {
     console.error(`License usage increment failed for report ${report.reportId}:`, e);
   }
+
+  // Fire-and-forget, deliberately not awaited: a tenant's webhook
+  // receiver being slow or down must never add latency to — or, worse,
+  // ever be able to fail — a technician's report submission. See
+  // lib/webhooks.ts for why this has no retry and how failures are
+  // still made visible (WebhookDelivery rows, not a swallowed error).
+  void dispatchWebhook(tenantFilter.tenantId, "report.created", {
+    reportId: report.reportId,
+    deviceMake: report.deviceMake,
+    deviceModel: report.deviceModel,
+    overallStatus: report.overallStatus,
+  }).catch((e) => console.error(`Webhook dispatch failed for report ${report.reportId}:`, e));
 
   res.status(201).json(report);
 });

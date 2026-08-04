@@ -46,6 +46,7 @@ const PUBLIC_USER_FIELDS = {
   tenantId: true,
   active: true,
   mustChangePassword: true,
+  mfaEnabled: true,
   lastLoginAt: true,
   createdAt: true,
 } as const;

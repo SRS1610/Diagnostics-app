@@ -24,6 +24,7 @@ import { DeviceHistoryPage, DevicesPage } from "./pages/Devices";
 import { ProfilesPage } from "./pages/Profiles";
 import { DisputesPage } from "./pages/Disputes";
 import { ActivityLogPage, BillingPage, SettingsPage, TeamPage } from "./pages/Misc";
+import { IntegrationsPage } from "./pages/Integrations";
 import { ChangePasswordPage } from "./pages/ChangePassword";
 import { CompliancePage } from "./pages/Compliance";
 import { TradeInPage } from "./pages/TradeIn";
@@ -98,6 +99,7 @@ export default function App() {
       <Route path="/compliance" element={<TenantRoute><CompliancePage /></TenantRoute>} />
       <Route path="/billing" element={<TenantRoute><BillingPage /></TenantRoute>} />
       <Route path="/team" element={<TenantRoute><TeamPage /></TenantRoute>} />
+      <Route path="/integrations" element={<TenantRoute><IntegrationsPage /></TenantRoute>} />
       <Route path="/activity" element={<TenantRoute><ActivityLogPage /></TenantRoute>} />
       <Route path="/settings" element={<TenantRoute><SettingsPage /></TenantRoute>} />
 

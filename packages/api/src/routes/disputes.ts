@@ -23,6 +23,7 @@ import { parseListWindow, setPaginationHeaders } from "../lib/pagination";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
 import { prisma } from "../lib/prisma";
+import { dispatchWebhook } from "../lib/webhooks";
 
 const router = Router();
 
@@ -203,6 +204,13 @@ router.post("/:disputeId/resolve", requireAuth, requireTenantScope, async (req, 
   const updated = await prisma.dispute.findFirst({
     where: { ...tenantWhere(req), disputeId: req.params.disputeId },
   });
+
+  void dispatchWebhook(req.portalSession!.viewingTenantId!, "dispute.resolved", {
+    disputeId: existing.disputeId,
+    reportId: existing.reportId,
+    outcome,
+  }).catch((e) => console.error(`Webhook dispatch failed for dispute ${existing.disputeId}:`, e));
+
   res.json(updated);
 });
 

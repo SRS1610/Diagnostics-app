@@ -174,6 +174,72 @@ export interface LoginResponse {
      *  routes straight to the password screen until it is cleared. */
     mustChangePassword?: boolean;
   };
+  /** Only present when a backup code was used to complete an MFA login —
+   *  the portal's cue to nudge "you're running low", not a routine field. */
+  backupCodesRemaining?: number;
+}
+
+/** What /auth/login returns for an MFA-enabled account instead of a
+ *  session: a short-lived token that only /auth/mfa/verify accepts. */
+export interface MfaRequiredResponse {
+  mfaRequired: true;
+  mfaToken: string;
+}
+
+export interface MfaEnrollResponse {
+  secret: string;
+  /** otpauth:// URI — render as a QR code for an authenticator app. */
+  otpauthUri: string;
+}
+
+export interface MfaConfirmResponse {
+  /** Shown exactly once — the API never returns these again. */
+  backupCodes: string[];
+  note: string;
+}
+
+export interface ApiKeySummary {
+  keyId: string;
+  name: string;
+  keyPrefix: string;
+  createdByUserId: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface ApiKeyCreated {
+  keyId: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: string;
+  /** The full key — shown exactly once, at creation. */
+  apiKey: string;
+  note: string;
+}
+
+export interface WebhookEndpointSummary {
+  endpointId: string;
+  url: string;
+  eventTypes: string[];
+  active: boolean;
+  createdAt: string;
+}
+
+export interface WebhookEndpointCreated extends WebhookEndpointSummary {
+  /** The HMAC signing secret — shown exactly once, at creation. */
+  secret: string;
+  note: string;
+}
+
+export interface WebhookDeliveryRecord {
+  deliveryId: string;
+  endpointId: string;
+  eventType: string;
+  statusCode: number | null;
+  succeeded: boolean;
+  error: string | null;
+  attemptedAt: string;
 }
 
 export interface PortalUser {
@@ -184,6 +250,7 @@ export interface PortalUser {
   tenantId: string | null;
   active: boolean;
   mustChangePassword: boolean;
+  mfaEnabled: boolean;
   lastLoginAt: string | null;
   createdAt: string;
 }
