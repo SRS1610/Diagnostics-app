@@ -4,7 +4,7 @@
 // pages live in their own files.
 
 import { useState } from "react";
-import { api, type ActivityLogEntry, type License, type Technician } from "../api/client";
+import { api, type ActivityLogEntry, type License, type OrgSettings, type Technician } from "../api/client";
 import { useSession } from "../auth/SessionContext";
 import { AsyncBoundary, Pager, StatCard, StatusBadge, formatDate, useApi } from "../components/common";
 import { UsersSection } from "./Users";
@@ -383,10 +383,141 @@ export function ActivityLogPage() {
 // ============================================================
 
 export function SettingsPage() {
+  const { role } = useSession();
+  const canEdit = role !== "tenant_staff";
+
+  const { data, loading, error, reload } = useApi(() => api.get<OrgSettings>("/settings"));
+
+  const [companyName, setCompanyName] = useState("");
+  const [minPinLength, setMinPinLength] = useState(4);
+  const [requirePurgeWipe, setRequirePurgeWipe] = useState(false);
+  // Tracks whether the form has been touched, so the fields can be
+  // initialised from the fetch WITHOUT a later refetch (e.g. after
+  // saving) silently overwriting an in-progress edit.
+  const [dirty, setDirty] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  if (data && !dirty) {
+    // Runs during render rather than an effect: React explicitly
+    // supports adjusting state while rendering when it's derived from a
+    // prop/fetch change (https://react.dev/learn/you-might-not-need-an-effect),
+    // and doing it here means the first paint already shows the real
+    // values instead of the defaults for one frame.
+    if (companyName !== data.companyName) setCompanyName(data.companyName);
+    if (minPinLength !== data.minPinLength) setMinPinLength(data.minPinLength);
+    if (requirePurgeWipe !== data.requirePurgeWipe) setRequirePurgeWipe(data.requirePurgeWipe);
+  }
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      await api.patch("/settings", { companyName: companyName.trim(), minPinLength, requirePurgeWipe });
+      setDirty(false);
+      setSaved(true);
+      await reload();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save settings");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       <h1 className="page-title">Settings</h1>
       <p className="page-sub">Organisation configuration</p>
+
+      <AsyncBoundary loading={loading} error={error}>
+        {data && (
+          <form className="card" style={{ marginBottom: 16 }} onSubmit={save}>
+            <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Organisation</h2>
+
+            {saveError && <div className="error-box">{saveError}</div>}
+
+            <div className="field">
+              <label htmlFor="sname">Organisation name</label>
+              <input
+                id="sname"
+                className="input"
+                value={companyName}
+                disabled={!canEdit}
+                onChange={(e) => {
+                  setDirty(true);
+                  setSaved(false);
+                  setCompanyName(e.target.value);
+                }}
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="spin">Minimum profile PIN length</label>
+              <select
+                id="spin"
+                className="input"
+                value={minPinLength}
+                disabled={!canEdit}
+                onChange={(e) => {
+                  setDirty(true);
+                  setSaved(false);
+                  setMinPinLength(Number(e.target.value));
+                }}
+              >
+                {[4, 5, 6].map((n) => (
+                  <option key={n} value={n}>
+                    {n} digits
+                  </option>
+                ))}
+              </select>
+              <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                Applies to new and edited profiles only — existing profile PINs are not changed. A 4-digit PIN is only
+                10,000 combinations; raise this as the number of active profiles grows.
+              </p>
+            </div>
+
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={requirePurgeWipe}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    setDirty(true);
+                    setSaved(false);
+                    setRequirePurgeWipe(e.target.checked);
+                  }}
+                />
+                Require NIST 800-88 Purge for all data erasure
+              </label>
+              <p className="muted" style={{ fontSize: 12, marginTop: 6, marginBottom: 0 }}>
+                {/* Real enforcement, not a preference — stated as such so
+                    turning it on isn't mistaken for a default that can be
+                    overridden per inspection. */}
+                When on, a technician's Clear-standard wipe certificate is refused outright rather than recorded.
+                Compliance-driven corporate customers typically require this; consumer resale usually does not.
+              </p>
+            </div>
+
+            {canEdit ? (
+              <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
+                <button className="btn" disabled={busy || !dirty}>
+                  {busy ? "Saving…" : "Save changes"}
+                </button>
+                {saved && <span className="muted" style={{ fontSize: 13 }}>Saved.</span>}
+              </div>
+            ) : (
+              <p className="muted" style={{ fontSize: 12.5, marginTop: 14, marginBottom: 0 }}>
+                Changing organisation settings requires tenant admin permissions.
+              </p>
+            )}
+          </form>
+        )}
+      </AsyncBoundary>
 
       {/* Retention is a settled decision, not an open question, and this
           panel says so. It is stated rather than offered as a toggle
@@ -415,11 +546,6 @@ export function SettingsPage() {
           toggles here would imply messages are going out when they are not.
         </p>
       </div>
-
-      <p className="page-sub" style={{ marginTop: 16 }}>
-        Settings are read-only for now: there is no persistence endpoint behind them, and a form that appears to save
-        but doesn't is worse than a page that says so.
-      </p>
     </>
   );
 }

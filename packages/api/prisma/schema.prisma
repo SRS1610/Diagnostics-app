@@ -26,6 +26,26 @@ model Tenant {
   primaryContactEmail String
   createdAt           DateTime @default(now())
 
+  // Org settings (admin_portal_settings.html). These are the two knobs
+  // CLAUDE.md actually names under "defaults (wipe standard, PIN
+  // length)" — kept on Tenant rather than a separate 1:1 table since
+  // there's no case where they're read without the tenant already
+  // loaded, and no history to keep on them.
+  //
+  // minPinLength is ENFORCED at profile PIN validation, not just a UI
+  // hint — CLAUDE.md: "Move to 5-6 digit PINs as active profile count
+  // grows — 4 digits is only 10,000 combinations." A tenant that has
+  // grown past that point can raise the floor for every profile it
+  // creates from here on.
+  minPinLength Int @default(4)
+  // requirePurgeWipe is likewise ENFORCED, not cosmetic — CLAUDE.md
+  // flags Purge as "a good candidate for a per-profile setting... require
+  // Purge for specific customer profiles." This is the tenant-wide
+  // version of that: a compliance-driven corporate customer can require
+  // every wipe certificate to be Purge, and a Clear certificate is then
+  // refused rather than silently accepted.
+  requirePurgeWipe Boolean @default(false)
+
   profiles     CustomerProfile[]
   licenses     License[]
   portalUsers  PortalUser[]

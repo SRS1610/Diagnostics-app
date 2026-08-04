@@ -175,6 +175,25 @@ router.post("/:reportId/wipe-certificate", requireTechnicianAuth, async (req, re
   });
   if (!report) return res.status(404).json({ error: "Report not found" });
 
+  // Settings enforcement, not a UI hint: a compliance-driven corporate
+  // customer can require Purge tenant-wide (CLAUDE.md flags this as "a
+  // good candidate for a per-profile setting... require Purge for
+  // specific customer profiles" — this is the tenant-wide version). A
+  // Clear certificate is refused outright rather than accepted and
+  // flagged, because accepting it at all would mean the attestation on
+  // file doesn't match what the customer's compliance program requires.
+  if (standard === "nist_800_88_clear") {
+    const tenant = await prisma.tenant.findFirst({
+      where: tenantFilter,
+      select: { requirePurgeWipe: true },
+    });
+    if (tenant?.requirePurgeWipe) {
+      return res.status(409).json({
+        error: "This tenant requires NIST 800-88 Purge for all data erasure — a Clear certificate cannot be recorded.",
+      });
+    }
+  }
+
   let certificate;
   try {
     certificate = await prisma.dataWipeCertificate.create({

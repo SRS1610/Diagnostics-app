@@ -196,6 +196,18 @@ export interface Tenant {
   createdAt: string;
 }
 
+/** The tenant's own settings — distinct from Tenant above, which is the
+ *  Master Console's cross-tenant view. minPinLength and requirePurgeWipe
+ *  are enforced server-side (profile PIN validation, wipe-certificate
+ *  recording), not just stored. */
+export interface OrgSettings {
+  tenantId: string;
+  companyName: string;
+  primaryContactEmail: string;
+  minPinLength: number;
+  requirePurgeWipe: boolean;
+}
+
 export interface Report {
   reportId: string;
   tenantId: string;

@@ -40,6 +40,19 @@ import { prisma } from "../lib/prisma";
 const router = Router();
 
 const PIN_PATTERN = /^\d{4,6}$/;
+
+/** Validates against the tenant's OWN minPinLength, not just the
+ *  absolute 4-6 floor/ceiling PIN_PATTERN enforces. CLAUDE.md: "Move to
+ *  5-6 digit PINs as active profile count grows" — this is what lets a
+ *  tenant that has grown past 4 digits actually raise the floor for new
+ *  and edited profiles, rather than the setting being cosmetic. */
+function validatePinLength(pin: string, minPinLength: number): string | null {
+  if (!PIN_PATTERN.test(pin)) return "pin must be 4-6 digits";
+  if (pin.length < minPinLength) {
+    return `pin must be at least ${minPinLength} digits for this tenant`;
+  }
+  return null;
+}
 const VALID_TEST_IDS = new Set(TEST_CATALOG.map((t) => t.testId));
 
 // Same enumeration concern as technicians.ts's badgeLoginRateLimit — a
@@ -110,9 +123,12 @@ router.post("/", requireAuth, requireTenantScope, async (req, res) => {
   if (!customerName || !pin) {
     return res.status(400).json({ error: "customerName and pin are required" });
   }
-  if (!PIN_PATTERN.test(pin)) {
-    return res.status(400).json({ error: "pin must be 4-6 digits" });
-  }
+  const tenant = await prisma.tenant.findFirst({
+    where: { tenantId: req.portalSession!.viewingTenantId! },
+    select: { minPinLength: true },
+  });
+  const pinError = validatePinLength(pin, tenant?.minPinLength ?? 4);
+  if (pinError) return res.status(400).json({ error: pinError });
   const validatedTestIds = validateEnabledTestIds(enabledTestIds ?? []);
   if (!validatedTestIds) {
     return res.status(400).json({ error: "enabledTestIds must be an array of known testIds from TEST_CATALOG" });
@@ -156,7 +172,12 @@ router.patch("/:profileId", requireAuth, requireTenantScope, async (req, res) =>
 
   if (customerName !== undefined) data.customerName = customerName;
   if (pin !== undefined) {
-    if (!PIN_PATTERN.test(pin)) return res.status(400).json({ error: "pin must be 4-6 digits" });
+    const tenant = await prisma.tenant.findFirst({
+      where: { tenantId: req.portalSession!.viewingTenantId! },
+      select: { minPinLength: true },
+    });
+    const pinError = validatePinLength(pin, tenant?.minPinLength ?? 4);
+    if (pinError) return res.status(400).json({ error: pinError });
     data.pin = pin;
   }
   if (enabledTestIds !== undefined) {
