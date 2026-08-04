@@ -340,6 +340,17 @@ model Report {
   // and a tracker that conflates them tells the customer nothing.
   offerDeclinedAt DateTime?
 
+  // Where notificationDelivery.ts sends stage-transition updates.
+  // Optional and independent of each other — a customer may give only
+  // one, or neither, and notification dispatch skips whichever channel
+  // has nothing to send to rather than treating an absent one as an
+  // error. Captured either by the technician at intake (POST /reports)
+  // or self-served by the customer on their own tracker link (PATCH
+  // /public/track/:token/contact) — whichever happens first wins;
+  // neither route overwrites a value the other already set.
+  consumerEmail String?
+  consumerPhone String?
+
   revisions       ReportRevision[]
   wipeCertificate DataWipeCertificate?
   warrantyClaims  WarrantyClaim[]

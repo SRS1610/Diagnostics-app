@@ -25,6 +25,7 @@ import { computeTradeInQuote, type CosmeticGrade, type DiagnosticResult, type Ma
 import { requireAuth } from "../middleware/auth";
 import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
+import { dispatchNotification } from "../lib/notificationDelivery";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
@@ -244,6 +245,10 @@ router.post("/", requireAuth, requireTenantScope, async (req, res) => {
     throw e;
   }
 
+  void dispatchNotification(report.reportId, "offer_ready", {
+    offerAmount: quote.finalOffer.toFixed(2),
+  });
+
   res.status(201).json(quote);
 });
 
@@ -293,6 +298,7 @@ router.post("/:quoteId/accept", requireAuth, requireTenantScope, async (req, res
   const updated = await prisma.tradeInQuote.findFirst({
     where: { ...tenantWhere(req), quoteId: req.params.quoteId },
   });
+  void dispatchNotification(quote.reportId, "offer_accepted");
   res.json(updated);
 });
 
@@ -341,6 +347,11 @@ router.post("/:quoteId/payout", requireAuth, requireTenantScope, async (req, res
     throw e;
   }
 
+  void dispatchNotification(quote.reportId, "payout_processing", {
+    offerAmount: quote.finalOffer.toFixed(2),
+    payoutMethod: method.replace(/_/g, " "),
+  });
+
   res.status(201).json({
     ...payout,
     // Nothing here moves money. Stated in the response so a caller
@@ -387,6 +398,14 @@ router.patch("/:quoteId/payout", requireAuth, requireTenantScope, async (req, re
   const updated = await prisma.payoutRecord.findFirst({
     where: { payoutId: quote.payout.payoutId },
   });
+
+  if (status === "completed") {
+    void dispatchNotification(quote.reportId, "payout_complete", {
+      offerAmount: quote.finalOffer.toFixed(2),
+      payoutMethod: quote.payout.method.replace(/_/g, " "),
+    });
+  }
+
   res.json(updated);
 });
 

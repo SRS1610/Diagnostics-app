@@ -24,6 +24,7 @@ import { parseDate, parseListWindow, parseSearch, setPaginationHeaders } from ".
 import { csvDocument, csvFilename } from "../lib/csv";
 import { prisma } from "../lib/prisma";
 import { dispatchWebhook } from "../lib/webhooks";
+import { dispatchNotification } from "../lib/notificationDelivery";
 
 const router = Router();
 
@@ -352,7 +353,7 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
   if (typeof device !== "object" || device === null) {
     return res.status(400).json({ error: "device is required" });
   }
-  const { make, model, serialNumber, imei, imei2, captureSource } = device as Record<string, unknown>;
+  const { make, model, serialNumber, imei, imei2, captureSource, consumerEmail, consumerPhone } = device as Record<string, unknown>;
 
   if (typeof make !== "string" || !make) return res.status(400).json({ error: "device.make is required" });
   if (typeof model !== "string" || !model) return res.status(400).json({ error: "device.model is required" });
@@ -367,6 +368,17 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
   }
   if (typeof captureSource !== "string" || !CAPTURE_SOURCES.has(captureSource)) {
     return res.status(400).json({ error: "device.captureSource must be one of: barcode, ocr, manual" });
+  }
+  // Optional — a technician captures these at intake if the customer
+  // wants stage-transition updates. Format-checked lightly rather than
+  // strictly: this is a contact preference, not an authentication
+  // credential, and rejecting a plausible value here just means a
+  // notification silently never sends instead of an intake being blocked.
+  if (consumerEmail !== undefined && consumerEmail !== null && typeof consumerEmail !== "string") {
+    return res.status(400).json({ error: "device.consumerEmail must be a string" });
+  }
+  if (consumerPhone !== undefined && consumerPhone !== null && typeof consumerPhone !== "string") {
+    return res.status(400).json({ error: "device.consumerPhone must be a string" });
   }
 
   const validated = validateResults(results);
@@ -408,6 +420,8 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
         imei,
         imei2: (imei2 as string | undefined) ?? null,
         captureSource,
+        consumerEmail: (consumerEmail as string | undefined)?.trim() || null,
+        consumerPhone: (consumerPhone as string | undefined)?.trim() || null,
         results: validated.value as unknown as object[],
         overallStatus: computeOverallStatus(validated.value),
         routing: (routing as string | undefined) ?? null,
@@ -449,6 +463,8 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
           imei,
           imei2: (imei2 as string | undefined) ?? null,
           captureSource,
+          consumerEmail: (consumerEmail as string | undefined)?.trim() || null,
+          consumerPhone: (consumerPhone as string | undefined)?.trim() || null,
           results: validated.value as unknown as object[],
           overallStatus: computeOverallStatus(validated.value),
           routing: (routing as string | undefined) ?? null,
@@ -502,6 +518,13 @@ router.post("/", requireTechnicianAuth, async (req, res) => {
     deviceModel: report.deviceModel,
     overallStatus: report.overallStatus,
   }).catch((e) => console.error(`Webhook dispatch failed for report ${report.reportId}:`, e));
+
+  // Fire-and-forget, same reasoning as the webhook above. Mapped to
+  // "inspection_complete" rather than "device_received": this API has
+  // no separate intake step before results exist — a report is created
+  // WITH its full results in one call — so there is no earlier moment
+  // to fire "device_received" at yet. Left unwired rather than guessed.
+  void dispatchNotification(report.reportId, "inspection_complete");
 
   res.status(201).json(report);
 });

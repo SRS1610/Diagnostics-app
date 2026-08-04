@@ -291,7 +291,73 @@ export function Tracker() {
           {offer.payout.note}
         </p>
       )}
+
+      <ContactPrompt
+        token={token}
+        notifications={view.notifications}
+        onSaved={() => void load()}
+      />
     </div>
+  );
+}
+
+/** Self-service contact capture. Shown until at least one channel is on
+ *  file, then replaced with a quiet confirmation — this is an offer, not
+ *  a form the customer is required to fill in to use the tracker. */
+function ContactPrompt({
+  token,
+  notifications,
+  onSaved,
+}: {
+  token: string;
+  notifications: TrackerView["notifications"];
+  onSaved: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (notifications.hasEmail || notifications.hasPhone) {
+    return (
+      <p className="muted small center">
+        We'll send updates to {notifications.hasEmail && notifications.hasPhone ? "your email and phone" : notifications.hasEmail ? "your email" : "your phone"} as your trade-in progresses.
+      </p>
+    );
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() && !phone.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await trackerApi.setContact(token, {
+        ...(email.trim() ? { email: email.trim() } : {}),
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
+      });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not save that. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="card" onSubmit={submit}>
+      <div className="card-title">Get updates</div>
+      <p className="muted small" style={{ margin: "0 0 10px" }}>
+        Add your email or phone number to get a text or email as your trade-in moves along — inspection complete,
+        offer ready, payout sent. Entirely optional.
+      </p>
+      {error && <div className="error-box" style={{ marginBottom: 8 }}>{error}</div>}
+      <input className="input" type="email" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} style={{ marginBottom: 8 }} />
+      <input className="input" type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} style={{ marginBottom: 10 }} />
+      <button className="btn btn-secondary" disabled={busy || (!email.trim() && !phone.trim())}>
+        {busy ? "Saving…" : "Save"}
+      </button>
+    </form>
   );
 }
 

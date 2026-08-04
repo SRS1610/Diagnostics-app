@@ -70,6 +70,9 @@ export interface TrackerView {
   } | null;
   dispute: { status: string; submittedAt: string; disputingItem: string } | null;
   onHold: boolean;
+  /** Never the actual address/number — just enough to decide whether to
+   *  offer "get updates" or confirm "we'll text/email you". */
+  notifications: { hasEmail: boolean; hasPhone: boolean };
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -108,6 +111,8 @@ export const trackerApi = {
       method: "POST",
       body: JSON.stringify({ disputingItem, customerNote }),
     }),
+  setContact: (token: string, contact: { email?: string; phone?: string }) =>
+    call<void>(`${base(token)}/contact`, { method: "PATCH", body: JSON.stringify(contact) }),
 };
 
 export function formatMoney(amount: number, currency: string): string {

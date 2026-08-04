@@ -48,6 +48,7 @@ import rateLimit from "express-rate-limit";
 import { looksLikeConsumerToken } from "../lib/consumerToken";
 import { prisma } from "../lib/prisma";
 import { dispatchWebhook } from "../lib/webhooks";
+import { dispatchNotification } from "../lib/notificationDelivery";
 
 const router = Router();
 
@@ -246,6 +247,12 @@ async function buildTrackerView(report: LoadedReport) {
     // The customer-facing consequence of an open dispute, stated where
     // they will see it rather than only enforced at the endpoints.
     onHold: Boolean(openDispute),
+    // Never the actual address/number — this is only enough for the UI
+    // to decide whether to show "want updates?" or "we'll text/email you".
+    notifications: {
+      hasEmail: Boolean(report.consumerEmail),
+      hasPhone: Boolean(report.consumerPhone),
+    },
   };
 }
 
@@ -297,6 +304,8 @@ router.post("/:token/offer/accept", publicWriteRateLimit, async (req, res) => {
     data: { accepted: true, acceptedAt: new Date() },
   });
   if (result.count === 0) return res.status(409).json({ error: "This offer has already been accepted." });
+
+  void dispatchNotification(report.reportId, "offer_accepted");
 
   const refreshed = await loadByToken(req.params.token);
   res.json(await buildTrackerView(refreshed!));
@@ -359,6 +368,11 @@ router.post("/:token/payout", publicWriteRateLimit, async (req, res) => {
     throw e;
   }
 
+  void dispatchNotification(report.reportId, "payout_processing", {
+    offerAmount: quote.finalOffer.toFixed(2),
+    payoutMethod: method.replace(/_/g, " "),
+  });
+
   const refreshed = await loadByToken(req.params.token);
   res.json(await buildTrackerView(refreshed!));
 });
@@ -420,8 +434,45 @@ router.post("/:token/dispute", publicWriteRateLimit, async (req, res) => {
     disputingItem: dispute.disputingItem,
   }).catch((e) => console.error(`Webhook dispatch failed for dispute ${dispute.disputeId}:`, e));
 
+  void dispatchNotification(report.reportId, "dispute_received");
+
   const refreshed = await loadByToken(req.params.token);
   res.status(201).json(await buildTrackerView(refreshed!));
+});
+
+// ============================================================
+// Contact info (for notification delivery — notificationDelivery.ts)
+// ============================================================
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+router.patch("/:token/contact", publicWriteRateLimit, async (req, res) => {
+  const { email, phone } = (req.body ?? {}) as { email?: unknown; phone?: unknown };
+
+  if (email === undefined && phone === undefined) {
+    return res.status(400).json({ error: "Provide an email and/or a phone number." });
+  }
+  if (email !== undefined && email !== null) {
+    if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
+      return res.status(400).json({ error: "That doesn't look like a valid email address." });
+    }
+  }
+  if (phone !== undefined && phone !== null && typeof phone !== "string") {
+    return res.status(400).json({ error: "phone must be a string" });
+  }
+
+  const report = await loadByToken(req.params.token);
+  if (!report) return res.status(404).json({ error: "This link is not valid." });
+
+  await prisma.report.update({
+    where: { reportId: report.reportId },
+    data: {
+      ...(email !== undefined ? { consumerEmail: email === null ? null : (email as string).trim() } : {}),
+      ...(phone !== undefined ? { consumerPhone: phone === null ? null : (phone as string).trim() || null } : {}),
+    },
+  });
+
+  res.status(204).send();
 });
 
 export default router;

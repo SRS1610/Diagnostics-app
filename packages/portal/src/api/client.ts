@@ -311,6 +311,11 @@ export interface Report {
   /** The customer's tracker capability. Optional because the list
    *  endpoint may omit it; the detail endpoint returns it. */
   consumerToken?: string;
+  /** Where notificationDelivery.ts sends stage-transition updates —
+   *  captured at intake or self-served by the customer on their tracker
+   *  link. Either, both, or neither may be set. */
+  consumerEmail?: string | null;
+  consumerPhone?: string | null;
 }
 
 export interface DiagnosticResult {

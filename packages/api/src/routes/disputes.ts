@@ -24,6 +24,7 @@ import { requireTenantScope, tenantWhere } from "../middleware/tenantScope";
 import { buildActivityLogData } from "../lib/activityLog";
 import { prisma } from "../lib/prisma";
 import { dispatchWebhook } from "../lib/webhooks";
+import { dispatchNotification } from "../lib/notificationDelivery";
 
 const router = Router();
 
@@ -210,6 +211,8 @@ router.post("/:disputeId/resolve", requireAuth, requireTenantScope, async (req, 
     reportId: existing.reportId,
     outcome,
   }).catch((e) => console.error(`Webhook dispatch failed for dispute ${existing.disputeId}:`, e));
+
+  void dispatchNotification(existing.reportId, "dispute_resolved");
 
   res.json(updated);
 });
