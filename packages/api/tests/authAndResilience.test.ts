@@ -231,7 +231,14 @@ describe("report validation", () => {
 describe("regression: a revoked session must not take down the API", () => {
   it("returns 401 and keeps serving other tenants", async () => {
     const techToken = await technicianLogin(app, fx.alpha.tenantId, fx.alpha.badgeCode);
-    await prisma.technician.delete({ where: { technicianId: fx.alpha.technicianId } });
+    // Deactivation rather than deletion: deleting a technician who has
+    // inspected anything is now refused outright so their attribution
+    // survives, which makes this the way a session actually gets pulled
+    // out from under a running shift.
+    await prisma.technician.update({
+      where: { technicianId: fx.alpha.technicianId },
+      data: { active: false },
+    });
 
     const res = await request(app)
       .post("/reports")
@@ -267,13 +274,16 @@ describe("regression: a revoked session must not take down the API", () => {
 // technician from the roster (the only lever an admin has when a badge
 // is lost or someone leaves) and suspending a tenant.
 describe("technician session revocation", () => {
-  it("stops accepting writes once the technician is removed from the roster", async () => {
+  it("stops accepting writes once the technician is gone from the roster", async () => {
     const token = await technicianLogin(app, fx.alpha.tenantId, fx.alpha.badgeCode);
     // Works before removal, so the test proves revocation and not just
     // that the request was broken to begin with.
     expect((await request(app).post("/reports").set("Authorization", `Bearer ${token}`).send(validReportBody())).status)
       .toBe(201);
 
+    // Clearing the reports first is what makes the delete legal at all
+    // now — the point of this case is the hard delete path, which
+    // remains reachable for a technician with no inspections attached.
     await prisma.report.deleteMany({ where: { technicianId: fx.alpha.technicianId } });
     await prisma.technician.delete({ where: { technicianId: fx.alpha.technicianId } });
 
@@ -326,5 +336,112 @@ describe("consumer token exposure", () => {
     const res = await request(app).get(`/reports/${fx.alpha.reportId}`).set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(typeof res.body.consumerToken).toBe("string");
+  });
+});
+
+// The retention policy is that inspection data — explicitly including
+// technician attribution — is kept indefinitely. That is only true if
+// deleting the config rows a report points at cannot blank them, so
+// these assert the property rather than the route's status code alone.
+describe("attribution outlives the roster", () => {
+  it("refuses to delete a technician who has inspected anything, and keeps the attribution", async () => {
+    const portalToken = await portalLogin(app, fx.alpha.adminEmail);
+    const before = await prisma.report.findUnique({ where: { reportId: fx.alpha.reportId } });
+    expect(before!.technicianId).toBe(fx.alpha.technicianId);
+
+    const res = await request(app)
+      .delete(`/technicians/${fx.alpha.technicianId}`)
+      .set("Authorization", `Bearer ${portalToken}`);
+
+    expect(res.status).toBe(409);
+    // The message has to tell an admin what to do instead, or they will
+    // reach for something worse.
+    expect(res.body.remedy).toMatch(/active: false/);
+
+    const after = await prisma.report.findUnique({ where: { reportId: fx.alpha.reportId } });
+    expect(after!.technicianId).toBe(fx.alpha.technicianId);
+    expect(await prisma.technician.count({ where: { technicianId: fx.alpha.technicianId } })).toBe(1);
+  });
+
+  it("refuses to delete a profile that inspections were recorded against", async () => {
+    const portalToken = await portalLogin(app, fx.alpha.adminEmail);
+    const res = await request(app)
+      .delete(`/profiles/${fx.alpha.profileId}`)
+      .set("Authorization", `Bearer ${portalToken}`);
+
+    expect(res.status).toBe(409);
+    const after = await prisma.report.findUnique({ where: { reportId: fx.alpha.reportId } });
+    expect(after!.profileId).toBe(fx.alpha.profileId);
+  });
+
+  it("still allows deleting a technician who never inspected anything", async () => {
+    const portalToken = await portalLogin(app, fx.alpha.adminEmail);
+    const created = await request(app)
+      .post("/technicians")
+      .set("Authorization", `Bearer ${portalToken}`)
+      .send({ displayName: "Never Used", badgeCode: "TEC-9999" });
+    expect(created.status).toBe(201);
+
+    const res = await request(app)
+      .delete(`/technicians/${created.body.technicianId}`)
+      .set("Authorization", `Bearer ${portalToken}`);
+    expect(res.status).toBe(204);
+  });
+
+  it("the database refuses it too, not just the route", async () => {
+    // The API's 409 is a courtesy. The guarantee has to hold against
+    // anything holding a connection, or it is not a guarantee.
+    await expect(
+      prisma.technician.delete({ where: { technicianId: fx.alpha.technicianId } }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("deactivation is how access is revoked", () => {
+  it("kills an already-issued session immediately and blocks re-login", async () => {
+    const token = await technicianLogin(app, fx.alpha.tenantId, fx.alpha.badgeCode);
+    const portalToken = await portalLogin(app, fx.alpha.adminEmail);
+
+    await request(app)
+      .patch(`/technicians/${fx.alpha.technicianId}`)
+      .set("Authorization", `Bearer ${portalToken}`)
+      .send({ active: false });
+
+    // The token was valid a moment ago and has not expired.
+    const write = await request(app)
+      .post("/reports")
+      .set("Authorization", `Bearer ${token}`)
+      .send(validReportBody());
+    expect(write.status).toBe(401);
+
+    // And the badge no longer logs in — with the same 404 an unknown
+    // badge gets, so this route can't be used to confirm real codes.
+    const relogin = await request(app)
+      .post("/technicians/login")
+      .send({ tenantId: fx.alpha.tenantId, badgeCode: fx.alpha.badgeCode });
+    expect(relogin.status).toBe(404);
+
+    // Attribution on their past work is untouched.
+    const report = await prisma.report.findUnique({ where: { reportId: fx.alpha.reportId } });
+    expect(report!.technicianId).toBe(fx.alpha.technicianId);
+  });
+
+  it("reactivating restores access", async () => {
+    const portalToken = await portalLogin(app, fx.alpha.adminEmail);
+    await request(app)
+      .patch(`/technicians/${fx.alpha.technicianId}`)
+      .set("Authorization", `Bearer ${portalToken}`)
+      .send({ active: false });
+    await request(app)
+      .patch(`/technicians/${fx.alpha.technicianId}`)
+      .set("Authorization", `Bearer ${portalToken}`)
+      .send({ active: true });
+
+    const token = await technicianLogin(app, fx.alpha.tenantId, fx.alpha.badgeCode);
+    const write = await request(app)
+      .post("/reports")
+      .set("Authorization", `Bearer ${token}`)
+      .send(validReportBody());
+    expect(write.status).toBe(201);
   });
 });

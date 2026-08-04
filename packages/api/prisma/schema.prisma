@@ -122,6 +122,13 @@ model Technician {
   tenant       Tenant   @relation(fields: [tenantId], references: [tenantId])
   displayName  String
   badgeCode    String
+  // How access is revoked now that deleting is refused for anyone who
+  // has inspected a device. Someone who leaves, or whose badge is lost,
+  // is deactivated: their sessions stop working immediately and their
+  // badge no longer logs in, while every report they produced keeps
+  // their name on it. Deleting a technician remains possible only while
+  // they have no reports at all.
+  active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
   reports Report[]
@@ -138,9 +145,18 @@ model Report {
   tenantId      String
   tenant        Tenant           @relation(fields: [tenantId], references: [tenantId])
   profileId     String?
-  profile       CustomerProfile? @relation(fields: [profileId], references: [profileId])
+  // Restrict, NOT the Prisma default. The default referential action for
+  // an optional relation is SetNull, which meant deleting a profile or a
+  // technician silently blanked that field on every report they were
+  // ever attached to — destroying attribution the retention policy says
+  // is kept forever, and that QA metrics, redo history and dispute notes
+  // are all derived from. The delete succeeded with a 204 and the
+  // history was simply gone. A report's provenance is now immutable at
+  // the database level: config rows referenced by inspections cannot be
+  // deleted at all (deactivate the technician instead).
+  profile       CustomerProfile? @relation(fields: [profileId], references: [profileId], onDelete: Restrict)
   technicianId  String?
-  technician    Technician?      @relation(fields: [technicianId], references: [technicianId])
+  technician    Technician?      @relation(fields: [technicianId], references: [technicianId], onDelete: Restrict)
   generatedAt   DateTime         @default(now())
   deviceMake    String
   deviceModel   String

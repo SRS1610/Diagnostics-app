@@ -97,10 +97,15 @@ export async function requireTechnicianAuth(req: Request, res: Response, next: N
     // trusted from it — if a technician were ever moved between tenants,
     // the old token must stop working rather than keep its old scope.
     where: { technicianId: decoded.technicianId, tenantId: decoded.tenantId },
-    select: { technicianId: true, tenant: { select: { status: true } } },
+    select: { technicianId: true, active: true, tenant: { select: { status: true } } },
   });
 
-  if (!technician) {
+  // Deleted, or deactivated. Deactivation is now the normal way to
+  // revoke someone (deleting is refused once they have inspected
+  // anything, so that their attribution survives), which makes checking
+  // this flag here the thing that actually cuts off an issued token
+  // rather than letting it run out its 12 hours.
+  if (!technician || !technician.active) {
     return res.status(401).json({ error: "This session is no longer valid. Log in again." });
   }
   if (technician.tenant.status === "suspended") {

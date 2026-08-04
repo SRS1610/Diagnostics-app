@@ -197,13 +197,30 @@ function NewLicenseForm({ onProvisioned }: { onProvisioned: () => void }) {
 // ============================================================
 
 export function TeamPage() {
-  const { data, loading, error } = useApi(() => api.get<Technician[]>("/technicians"));
+  const { data, loading, error, reload } = useApi(() => api.get<Technician[]>("/technicians"));
   const technicians = data ?? [];
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Deactivation, not deletion. A technician who has inspected anything
+  // cannot be deleted — that would erase their attribution — so this is
+  // the control that actually revokes access, and it takes effect on
+  // their next request rather than when their session would expire.
+  const setActive = async (technician: Technician, active: boolean) => {
+    setActionError(null);
+    try {
+      await api.patch(`/technicians/${technician.technicianId}`, { active });
+      await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not update this technician");
+    }
+  };
 
   return (
     <>
       <h1 className="page-title">Team</h1>
       <p className="page-sub">Technicians who can run inspections for this tenant</p>
+
+      {actionError && <div className="error-box">{actionError}</div>}
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <AsyncBoundary loading={loading} error={error} isEmpty={technicians.length === 0} emptyMessage="No technicians yet.">
@@ -212,7 +229,9 @@ export function TeamPage() {
               <tr>
                 <th>Name</th>
                 <th>Badge code</th>
+                <th>Access</th>
                 <th>Added</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -220,7 +239,17 @@ export function TeamPage() {
                 <tr key={t.technicianId}>
                   <td style={{ fontWeight: 600 }}>{t.displayName}</td>
                   <td className="muted">{t.badgeCode}</td>
+                  <td>
+                    <span className={`badge ${t.active ? "badge-pass" : "badge-neutral"}`}>
+                      {t.active ? "active" : "deactivated"}
+                    </span>
+                  </td>
                   <td className="muted">{formatDate(t.createdAt)}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => void setActive(t, !t.active)}>
+                      {t.active ? "Deactivate" : "Reactivate"}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -229,6 +258,12 @@ export function TeamPage() {
       </div>
 
       <p className="page-sub" style={{ marginTop: 16 }}>
+        Deactivating ends a technician's access immediately — any session already open on a tablet stops working on its
+        next request, and their badge no longer signs in. Their inspection history keeps their name on it, which is why
+        this replaces deleting them.
+      </p>
+
+      <p className="page-sub">
         QA metrics (redo rate, dispute rate per technician) are part of this page in the design but need aggregate
         endpoints that don't exist yet. Showing invented figures on a page used to judge people's work would be worse
         than showing none.
@@ -329,17 +364,23 @@ export function SettingsPage() {
       <h1 className="page-title">Settings</h1>
       <p className="page-sub">Organisation configuration</p>
 
+      {/* Retention is a settled decision, not an open question, and this
+          panel says so. It is stated rather than offered as a toggle
+          because there is no expiry logic anywhere in the system to
+          switch off — keeping data is what happens when nothing deletes
+          it, and a control implying otherwise would be fiction. */}
       <div className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Data retention</h2>
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.7, margin: 0 }}>
-          Inspection data is kept <strong>indefinitely</strong>. There is no automatic expiry or purge — this applies
-          to IMEI and serial numbers, cosmetic photos, dispute records, technician attribution and redo history.
+          Inspection data is kept <strong>indefinitely, by policy</strong>. There is no automatic expiry, purge or
+          archival job — this applies to IMEI and serial numbers, cosmetic photos, dispute records, technician
+          attribution and redo history alike.
         </p>
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 0 }}>
-          If a customer is covered by a right-to-deletion law (GDPR, CCPA/CPRA or similar), keeping data by default
-          does not remove the obligation to honour a specific deletion request — it means there is no automatic
-          process for one. <strong>A manual deletion path has not been built.</strong> That needs to exist before this
-          handles consumer data in those jurisdictions.
+          No self-service deletion exists, deliberately: an audit trail that can be erased from the portal is not an
+          audit trail. If a customer covered by a right-to-deletion law (GDPR, CCPA/CPRA or similar) makes a specific
+          request, honouring it is a manual, out-of-band task for whoever administers the database — the policy above
+          sets the default, it does not answer the request.
         </p>
       </div>
 

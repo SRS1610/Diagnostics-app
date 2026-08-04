@@ -209,6 +209,22 @@ router.delete("/:profileId", requireAuth, requireTenantScope, async (req, res) =
   });
   if (!existing) return res.status(404).json({ error: "Profile not found" });
 
+  // Refused once inspections reference this profile. The delete used to
+  // succeed and blank profileId on each of those reports, losing which
+  // test set a device was inspected under — which is part of what makes
+  // an old report interpretable at all.
+  const reportCount = await prisma.report.count({
+    where: { ...tenantWhere(req), profileId: req.params.profileId },
+  });
+  if (reportCount > 0) {
+    return res.status(409).json({
+      error:
+        `This profile has ${reportCount} inspection(s) recorded against it and cannot be deleted — ` +
+        `removing it would erase which test set those devices were inspected under.`,
+      reportCount,
+    });
+  }
+
   // Combined tenant + id filter in the delete itself, not just the
   // preceding findFirst — see the note on PATCH above.
   const result = await prisma.customerProfile.deleteMany({

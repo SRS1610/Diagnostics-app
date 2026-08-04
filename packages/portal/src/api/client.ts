@@ -147,6 +147,9 @@ export interface Technician {
   tenantId: string;
   displayName: string;
   badgeCode: string;
+  /** False once revoked. Deactivation replaces deletion for anyone who
+   *  has inspected a device, so that their attribution survives. */
+  active: boolean;
   createdAt: string;
 }
 

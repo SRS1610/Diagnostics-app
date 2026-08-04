@@ -106,10 +106,18 @@ router.patch("/:technicianId", requireAuth, requireTenantScope, async (req, res)
   });
   if (!existing) return res.status(404).json({ error: "Technician not found" });
 
-  const { displayName, badgeCode } = req.body;
+  const { displayName, badgeCode, active } = req.body;
   const data: Prisma.TechnicianUpdateManyMutationInput = {};
   if (displayName !== undefined) data.displayName = displayName;
   if (badgeCode !== undefined) data.badgeCode = badgeCode;
+  // Deactivation is how access is revoked. It takes effect on the next
+  // request — requireTechnicianAuth re-checks this flag, so an already
+  // issued session token stops working immediately rather than lasting
+  // out its 12 hours.
+  if (active !== undefined) {
+    if (typeof active !== "boolean") return res.status(400).json({ error: "active must be a boolean" });
+    data.active = active;
+  }
 
   try {
     // Combined tenant + id filter in the write itself (updateMany, not
@@ -134,7 +142,33 @@ router.patch("/:technicianId", requireAuth, requireTenantScope, async (req, res)
   res.json(updated);
 });
 
+/**
+ * Deleting a technician is now refused once they have inspected
+ * anything, and this is deliberate rather than a limitation.
+ *
+ * Before, this route returned 204 and the database quietly set
+ * technicianId to NULL on every report that person had ever produced —
+ * so the one action an admin had for cutting off access also erased the
+ * attribution behind QA metrics, redo history and dispute notes, which
+ * the retention policy says is kept indefinitely. The foreign key is now
+ * RESTRICT, and this route explains the alternative instead of failing
+ * with a foreign-key error.
+ */
 router.delete("/:technicianId", requireAuth, requireTenantScope, async (req, res) => {
+  const reportCount = await prisma.report.count({
+    where: { ...tenantWhere(req), technicianId: req.params.technicianId },
+  });
+  if (reportCount > 0) {
+    return res.status(409).json({
+      error:
+        `This technician has ${reportCount} inspection(s) attributed to them and cannot be deleted — ` +
+        `removing them would erase that attribution. Deactivate them instead: their access stops immediately ` +
+        `and their inspection history stays intact.`,
+      reportCount,
+      remedy: "PATCH this technician with { active: false }",
+    });
+  }
+
   const result = await prisma.technician.deleteMany({
     where: { ...tenantWhere(req), technicianId: req.params.technicianId },
   });
@@ -162,7 +196,13 @@ router.post("/login", badgeLoginRateLimit, async (req, res) => {
     // re-review of what an unauthenticated caller should see.
     include: { tenant: { select: { companyName: true } } },
   });
-  if (!technician) return res.status(404).json({ error: "Badge code not recognized for this tenant" });
+  // Same 404 for an unrecognised badge and a deactivated one. A
+  // distinguishable "this badge exists but is switched off" would turn
+  // this unauthenticated route into a way to confirm which badge codes
+  // are real — the enumeration risk badgeLoginRateLimit exists to blunt.
+  if (!technician || !technician.active) {
+    return res.status(404).json({ error: "Badge code not recognized for this tenant" });
+  }
 
   // Trim the response to what a mobile session actually needs — no
   // reason to echo badgeCode back once it's served its purpose as a
