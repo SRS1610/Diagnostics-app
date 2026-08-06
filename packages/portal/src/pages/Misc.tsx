@@ -292,9 +292,33 @@ function NewLicenseForm({ onProvisioned }: { onProvisioned: () => void }) {
 // Team — admin_portal_team.html
 // ============================================================
 
+interface TechnicianQaRow {
+  technicianId: string;
+  displayName: string;
+  active: boolean;
+  reports: number;
+  reportsWithRevisions: number;
+  reportsWithDisputes: number;
+  redoRate: number | null;
+  disputeRate: number | null;
+}
+
+// A null rate is not the same as 0% — it means the technician has no
+// reports yet, so there is no signal. Rendering "0%" for a brand new
+// hire would put them at the top of a rate-sorted list they don't
+// belong on, which the aggregate endpoint documents explicitly.
+function formatRate(rate: number | null): string {
+  if (rate === null) return "—";
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
 export function TeamPage() {
   const { data, loading, error, reload } = useApi(() => api.get<Technician[]>("/technicians"));
+  const { data: qaData } = useApi(() =>
+    api.get<{ technicians: TechnicianQaRow[] }>("/qa-metrics/technicians"),
+  );
   const technicians = data ?? [];
+  const qaByTech = new Map((qaData?.technicians ?? []).map((r) => [r.technicianId, r]));
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Deactivation, not deletion. A technician who has inspected anything
@@ -326,28 +350,41 @@ export function TeamPage() {
                 <th>Name</th>
                 <th>Badge code</th>
                 <th>Access</th>
+                <th style={{ textAlign: "right" }}>Reports</th>
+                <th style={{ textAlign: "right" }}>Redo rate</th>
+                <th style={{ textAlign: "right" }}>Dispute rate</th>
                 <th>Added</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {technicians.map((t) => (
-                <tr key={t.technicianId}>
-                  <td style={{ fontWeight: 600 }}>{t.displayName}</td>
-                  <td className="muted">{t.badgeCode}</td>
-                  <td>
-                    <span className={`badge ${t.active ? "badge-pass" : "badge-neutral"}`}>
-                      {t.active ? "active" : "deactivated"}
-                    </span>
-                  </td>
-                  <td className="muted">{formatDate(t.createdAt)}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => void setActive(t, !t.active)}>
-                      {t.active ? "Deactivate" : "Reactivate"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {technicians.map((t) => {
+                const qa = qaByTech.get(t.technicianId);
+                return (
+                  <tr key={t.technicianId}>
+                    <td style={{ fontWeight: 600 }}>{t.displayName}</td>
+                    <td className="muted">{t.badgeCode}</td>
+                    <td>
+                      <span className={`badge ${t.active ? "badge-pass" : "badge-neutral"}`}>
+                        {t.active ? "active" : "deactivated"}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{qa?.reports ?? 0}</td>
+                    <td style={{ textAlign: "right" }} title={qa ? `${qa.reportsWithRevisions} of ${qa.reports} reports revised` : ""}>
+                      {formatRate(qa?.redoRate ?? null)}
+                    </td>
+                    <td style={{ textAlign: "right" }} title={qa ? `${qa.reportsWithDisputes} of ${qa.reports} reports disputed` : ""}>
+                      {formatRate(qa?.disputeRate ?? null)}
+                    </td>
+                    <td className="muted">{formatDate(t.createdAt)}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => void setActive(t, !t.active)}>
+                        {t.active ? "Deactivate" : "Reactivate"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </AsyncBoundary>
@@ -366,9 +403,8 @@ export function TeamPage() {
       <UsersSection />
 
       <p className="page-sub">
-        QA metrics (redo rate, dispute rate per technician) are part of this page in the design but need aggregate
-        endpoints that don't exist yet. Showing invented figures on a page used to judge people's work would be worse
-        than showing none.
+        Redo rate counts each report at most once even when it was revised more than once — the question is "how often
+        does this person's work need a second look", not the total revision count. A dash means no reports yet, not 0%.
       </p>
     </>
   );

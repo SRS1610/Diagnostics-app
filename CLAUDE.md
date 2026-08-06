@@ -694,10 +694,12 @@ same caveat pattern used for device verification/pricing earlier.
   (`Users.tsx`'s `UsersSection`) on the same page — deliberately
   together, since both answer "who works here," just for the tablet vs.
   the portal. **QA metrics (redo rate, dispute rate per technician) are
-  still NOT built** — the design calls for them here, but the aggregate
-  endpoints they'd need don't exist yet, and the page says so plainly
-  rather than showing invented figures on a screen used to judge
-  people's work.
+  now wired** via `GET /qa-metrics/technicians` (`routes/qaMetrics.ts`),
+  displayed as extra columns on the Team page table. Both rates use
+  distinct-reports semantics (a report revised twice still counts as
+  one "needed a second look"), and a technician with zero reports shows
+  a dash rather than 0% so a new hire isn't rendered as a top performer
+  by accident.
 - **Settings** (`admin_portal_settings.html`): org config with real,
   enforced persistence (`routes/orgSettings.ts` — see "Settings" in the
   Redo/retest section's neighbors and `SettingsPage` in the portal), the

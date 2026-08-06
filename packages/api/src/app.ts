@@ -48,6 +48,7 @@ import publicApiRoutes from "./routes/publicApi";
 import ssoRoutes from "./routes/sso";
 import billingRoutes from "./routes/billing";
 import consumerDataRoutes from "./routes/consumerData";
+import qaMetricsRoutes from "./routes/qaMetrics";
 
 export function createApp() {
   const app = express();
@@ -91,6 +92,7 @@ export function createApp() {
   app.use("/", ssoRoutes);
   app.use("/billing", billingRoutes);
   app.use("/", consumerDataRoutes);
+  app.use("/", qaMetricsRoutes);
   // Read-only, API-key-authenticated surface for external integrations —
   // mounted under its own prefix for the same reason /public/track is:
   // "is this route authenticated by a portal session?" is answerable
