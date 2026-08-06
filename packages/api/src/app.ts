@@ -55,7 +55,22 @@ export function createApp() {
   // Pagination metadata travels in headers (see lib/pagination.ts), and
   // a browser cannot read a custom response header unless the server
   // says so — without this the portal sees the rows but no counts.
-  app.use(cors({ exposedHeaders: ["X-Total-Count", "X-Limit", "X-Offset", "X-Has-More"] }));
+  // CORS_ORIGINS is a comma-separated allowlist of browser origins that
+  // may hit this API (e.g. the Netlify portal URL, the consumer site).
+  // Unset = permissive (fine for local dev and integration tests); set
+  // it in production so a rogue site can't drive an admin's session
+  // token from another tab.
+  const corsOrigins = (process.env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  app.use(
+    cors({
+      origin: corsOrigins.length === 0 ? true : corsOrigins,
+      credentials: true,
+      exposedHeaders: ["X-Total-Count", "X-Limit", "X-Offset", "X-Has-More"],
+    }),
+  );
   // Explicit rather than relying on body-parser's 100kb default — a report
   // carries a full DiagnosticResult[] and this cap should be a decision,
   // not an accident. Raise deliberately if real test payloads approach it.

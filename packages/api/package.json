@@ -13,6 +13,9 @@
     "test": "jest --runInBand",
     "test:setup": "DATABASE_URL=${TEST_DATABASE_URL:-postgresql://diagnostics:diagnostics_dev@localhost:5432/diagnostics_test} prisma migrate deploy"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@diagnostics/shared": "*",
     "@prisma/client": "^5.18.0",

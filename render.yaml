@@ -1,0 +1,51 @@
+# Render Blueprint — one API web service + a managed Postgres for it.
+#
+# Create with: New → Blueprint on Render, point at this repo, pick the
+# branch. Render provisions the Postgres, wires DATABASE_URL, and builds
+# the API. After first deploy, open a Shell on the diagnostics-api
+# service and run `npx --workspace=packages/api prisma db seed` once to
+# populate the master + tenant admin accounts.
+
+databases:
+  - name: diagnostics-db
+    plan: free
+    databaseName: diagnostics
+    user: diagnostics
+
+services:
+  - type: web
+    name: diagnostics-api
+    runtime: node
+    plan: free
+    branch: main
+    rootDir: .
+    buildCommand: |
+      npm ci
+      npm run build --workspace=@diagnostics/shared
+      npx --workspace=packages/api prisma generate
+      npm run build --workspace=@diagnostics/api
+    preDeployCommand: npx --workspace=packages/api prisma migrate deploy
+    startCommand: node packages/api/dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: diagnostics-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      # Set these in the Render dashboard after the Netlify site exists:
+      #   CORS_ORIGINS  = https://your-portal.netlify.app,https://your-consumer.netlify.app
+      #   PORTAL_BASE_URL, CONSUMER_BASE_URL, API_BASE_URL — set to the
+      #   deployed HTTPS URLs so links in emails, SSO callbacks, and the
+      #   Stripe checkout return path all resolve.
+      - key: CORS_ORIGINS
+        sync: false
+      - key: PORTAL_BASE_URL
+        sync: false
+      - key: CONSUMER_BASE_URL
+        sync: false
+      - key: API_BASE_URL
+        sync: false

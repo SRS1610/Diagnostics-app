@@ -1,0 +1,21 @@
+# Netlify build config for packages/portal.
+#
+# Netlify only serves the built React bundle — the Express API in
+# packages/api runs separately (see render.yaml). VITE_API_BASE_URL is
+# inlined at build time, so setting it in Netlify's UI requires a
+# redeploy to take effect.
+
+[build]
+  base = "."
+  command = "npm ci && npm run build --workspace=@diagnostics/shared && npm run build --workspace=@diagnostics/portal"
+  publish = "packages/portal/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NPM_FLAGS = "--legacy-peer-deps"
+
+# SPA fallback — React Router owns every path under /.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
