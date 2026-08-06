@@ -62,7 +62,9 @@ export type ActivityAction =
   | "warranty_claim_resolved"
   // Notifications
   | "notification_sent"
-  | "notification_failed";
+  | "notification_failed"
+  // Privacy / right-to-deletion (GDPR/CCPA)
+  | "consumer_data_erased";
 
 export interface ActivityLogEntry {
   entryId: string;

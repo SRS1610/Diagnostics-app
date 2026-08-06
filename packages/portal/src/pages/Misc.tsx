@@ -1067,25 +1067,25 @@ export function SettingsPage() {
         )}
       </AsyncBoundary>
 
-      {/* Retention is a settled decision, not an open question, and this
-          panel says so. It is stated rather than offered as a toggle
-          because there is no expiry logic anywhere in the system to
-          switch off — keeping data is what happens when nothing deletes
-          it, and a control implying otherwise would be fiction. */}
+      {/* Retention is a settled default, not an open question. Erasure
+          is the specific-request exception to it — one card explains the
+          default, the next card is the mechanism for honouring a
+          specific-request exception when it arrives. */}
       <div className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Data retention</h2>
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.7, margin: 0 }}>
           Inspection data is kept <strong>indefinitely, by policy</strong>. There is no automatic expiry, purge or
           archival job — this applies to IMEI and serial numbers, cosmetic photos, dispute records, technician
-          attribution and redo history alike.
+          attribution and redo history alike. The audit trail is the point; nothing prunes it in the background.
         </p>
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 0 }}>
-          No self-service deletion exists, deliberately: an audit trail that can be erased from the portal is not an
-          audit trail. If a customer covered by a right-to-deletion law (GDPR, CCPA/CPRA or similar) makes a specific
-          request, honouring it is a manual, out-of-band task for whoever administers the database — the policy above
-          sets the default, it does not answer the request.
+          The one exception is a specific right-to-deletion request from a customer covered by GDPR, CCPA/CPRA or a
+          similar law. Use <strong>Consumer data erasure</strong> below to process one — the mechanism is per-request
+          and attributed, not a self-service purge button.
         </p>
       </div>
+
+      <ErasureSection canEdit={canEdit} />
 
       <div className="card">
         <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Notifications</h2>
@@ -1095,5 +1095,229 @@ export function SettingsPage() {
         </p>
       </div>
     </>
+  );
+}
+
+/**
+ * The right-to-deletion mechanism — the specific-request exception to
+ * the "keep forever" default stated above. Two steps deliberately:
+ *   1. Preview — a lookup, no writes. Shows how many rows the erasure
+ *      would touch and a sample of them, so an admin confirms they're
+ *      erasing the right person before pulling the trigger. Typos in
+ *      the address must not silently affect nothing OR silently affect
+ *      the wrong customer.
+ *   2. Erase — takes a reason (stored on the audit log per erased
+ *      report). Not a soft-delete; the PII fields are set to null in
+ *      place. The report itself, its inspection results and timestamps,
+ *      remain — those are business records, not personal data.
+ */
+interface ErasurePreview {
+  selector: { email?: string; phone?: string };
+  reports: {
+    total: number;
+    sample: Array<{ reportId: string; deviceMake: string; deviceModel: string; generatedAt: string }>;
+  };
+  disputes: { total: number };
+}
+
+interface ErasureResult {
+  selector: { email?: string; phone?: string };
+  reason: string;
+  erasedReports: number;
+  redactedDisputes: number;
+  reportIds: string[];
+}
+
+function ErasureSection({ canEdit }: { canEdit: boolean }) {
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [reason, setReason] = useState("");
+  const [preview, setPreview] = useState<ErasurePreview | null>(null);
+  const [result, setResult] = useState<ErasureResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectorQuery = () => {
+    const params = new URLSearchParams();
+    if (email.trim()) params.set("email", email.trim());
+    if (phone.trim()) params.set("phone", phone.trim());
+    return params.toString();
+  };
+
+  const runPreview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setResult(null);
+    setPreview(null);
+    if (!email.trim() && !phone.trim()) {
+      setError("Enter an email or phone to look up.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await api.get<ErasurePreview>(`/consumer-data?${selectorQuery()}`);
+      setPreview(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runErase = async () => {
+    if (!reason.trim()) {
+      setError("A reason is required so the erasure is auditable.");
+      return;
+    }
+    if (!preview) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const body: Record<string, string> = { reason: reason.trim() };
+      if (preview.selector.email) body.email = preview.selector.email;
+      if (preview.selector.phone) body.phone = preview.selector.phone;
+      const data = await api.post<ErasureResult>("/consumer-data/erase", body);
+      setResult(data);
+      setPreview(null);
+      setEmail("");
+      setPhone("");
+      setReason("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erasure failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Consumer data erasure</h2>
+      <p className="muted" style={{ fontSize: 13, lineHeight: 1.7, marginTop: 0 }}>
+        Scrubs a specific consumer's contact details (email, phone) from every report they appear on in this tenant,
+        and redacts their free-text dispute notes. Inspection results, device serial, timestamps and technician
+        attribution remain — those are business records under the retention policy above.
+      </p>
+
+      {!canEdit ? (
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
+          Erasing consumer data requires tenant admin permissions.
+        </p>
+      ) : (
+        <>
+          {error && <div className="error-box" style={{ marginBottom: 10 }}>{error}</div>}
+
+          {result && (
+            <div
+              className="card"
+              style={{
+                background: "var(--good-bg, #ecfdf5)",
+                border: "1px solid var(--good, #10b981)",
+                marginBottom: 12,
+              }}
+            >
+              <strong>Erasure complete.</strong>
+              <p style={{ fontSize: 13, marginBottom: 0 }}>
+                Scrubbed contact info from {result.erasedReports} report(s) and redacted{" "}
+                {result.redactedDisputes} dispute note(s). Logged to the activity trail.
+              </p>
+            </div>
+          )}
+
+          <form onSubmit={runPreview} style={{ display: "grid", gap: 10 }}>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="erase-email">Email</label>
+              <input
+                id="erase-email"
+                type="email"
+                className="input"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setPreview(null);
+                  setResult(null);
+                }}
+                placeholder="customer@example.com"
+              />
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="erase-phone">Phone</label>
+              <input
+                id="erase-phone"
+                type="tel"
+                className="input"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  setPreview(null);
+                  setResult(null);
+                }}
+                placeholder="+15551234567"
+              />
+              <p className="muted" style={{ fontSize: 12, marginTop: 6, marginBottom: 0 }}>
+                Either one is enough. If both are provided, rows matching either are included.
+              </p>
+            </div>
+            <div>
+              <button className="btn" disabled={busy}>
+                {busy && !preview ? "Looking up…" : "Preview affected records"}
+              </button>
+            </div>
+          </form>
+
+          {preview && (
+            <div style={{ marginTop: 14, borderTop: "1px solid var(--border, #e5e7eb)", paddingTop: 12 }}>
+              <p style={{ fontSize: 13, margin: "0 0 8px" }}>
+                <strong>{preview.reports.total}</strong> report(s) match this selector.{" "}
+                {preview.disputes.total > 0 && (
+                  <>
+                    <strong>{preview.disputes.total}</strong> dispute note(s) would also be redacted.
+                  </>
+                )}
+              </p>
+              {preview.reports.sample.length > 0 && (
+                <ul className="muted" style={{ fontSize: 12.5, marginTop: 0, paddingLeft: 18 }}>
+                  {preview.reports.sample.map((r) => (
+                    <li key={r.reportId}>
+                      {r.reportId} — {r.deviceMake} {r.deviceModel} ({new Date(r.generatedAt).toLocaleDateString()})
+                    </li>
+                  ))}
+                  {preview.reports.total > preview.reports.sample.length && (
+                    <li>…and {preview.reports.total - preview.reports.sample.length} more</li>
+                  )}
+                </ul>
+              )}
+
+              {preview.reports.total === 0 ? (
+                <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
+                  Nothing to erase — double-check the address for typos.
+                </p>
+              ) : (
+                <div className="field" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <label htmlFor="erase-reason">Reason (stored on the audit log)</label>
+                  <input
+                    id="erase-reason"
+                    className="input"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="e.g. DSR-042 — right-to-deletion request received 2026-08-06"
+                  />
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={runErase}
+                      disabled={busy || !reason.trim()}
+                      style={{ background: "var(--danger, #dc2626)", color: "white" }}
+                    >
+                      {busy ? "Erasing…" : `Erase ${preview.reports.total} report(s)`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
