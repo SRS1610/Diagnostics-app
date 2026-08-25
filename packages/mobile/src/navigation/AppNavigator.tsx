@@ -16,6 +16,16 @@ import { CosmeticScanScreen } from '../screens/CosmeticScanScreen';
 import { ResultsScreen } from '../screens/ResultsScreen';
 import { CompleteScreen } from '../screens/CompleteScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
+import { DeviceCheckScreen } from '../screens/DeviceCheckScreen';
+import { WelcomeScreen } from '../screens/WelcomeScreen';
+import { ReviewDamageScreen } from '../screens/ReviewDamageScreen';
+import { YourOfferScreen } from '../screens/YourOfferScreen';
+import {
+  BatteryHealthScreen,
+  CountryOfOriginScreen,
+  MotionTestScreen,
+  SoundCheckScreen,
+} from '../screens/ChapterScreens';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -23,12 +33,20 @@ const BUILT_SCREENS: Partial<Record<keyof RootStackParamList, React.ComponentTyp
   TechnicianLogin: TechnicianLoginScreen,
   ScanProfile: ScanProfileScreen,
   LicenseCheck: LicenseCheckScreen,
+  DeviceCheck: DeviceCheckScreen,
+  Welcome: WelcomeScreen,
   FindYourId: FindYourIdScreen,
   Confirm: ConfirmScreen,
   Checklist: ChecklistScreen,
   RunTest: RunTestScreen,
+  MotionTest: MotionTestScreen,
+  SoundCheck: SoundCheckScreen,
+  BatteryHealth: BatteryHealthScreen,
+  CountryOfOrigin: CountryOfOriginScreen,
   CosmeticScan: CosmeticScanScreen,
+  ReviewDamage: ReviewDamageScreen,
   Results: ResultsScreen,
+  YourOffer: YourOfferScreen,
   Complete: CompleteScreen,
 };
 
