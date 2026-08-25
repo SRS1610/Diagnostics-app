@@ -220,6 +220,7 @@ export function TradeInPage() {
       </p>
 
       <h2 style={{ fontSize: 15, margin: "24px 0 10px" }}>Marketplace listings</h2>
+      {canAct && <CreateListingForm onCreated={() => void listingsQuery.reload()} />}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <AsyncBoundary
           loading={listingsQuery.loading}
@@ -258,6 +259,89 @@ export function TradeInPage() {
 
       {canAct && <PricingSection />}
     </>
+  );
+}
+
+// ============================================================
+// Create listing — POST /listings.
+// The API refuses on an open dispute (409) and needs both a reportId
+// and a grade. This form takes both, surfacing the API's specific
+// error message on rejection rather than swallowing it. Prices here
+// are placeholder-formula (marketplaceListing.ts's 1.35x markup on the
+// trade-in quote), which is stated inline so the operator doesn't
+// confuse the number for a pricing decision.
+// ============================================================
+
+function CreateListingForm({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [reportId, setReportId] = useState("");
+  const [grade, setGrade] = useState<"A" | "B" | "C" | "D">("B");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      const listing = await api.post<Listing>("/listings", { reportId: reportId.trim(), grade });
+      setMsg({ kind: "ok", text: `Listing ${listing.listingId} created (draft, placeholder pricing).` });
+      setReportId("");
+      setOpen(false);
+      onCreated();
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Could not create the listing." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <button className="btn btn-sm" onClick={() => setOpen(true)}>Create listing</button>
+        {msg && (
+          <div className={msg.kind === "ok" ? "info-box" : "error-box"} style={{ marginTop: 8 }}>
+            {msg.text}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <form className="card" style={{ marginBottom: 12 }} onSubmit={submit}>
+      {msg && <div className={msg.kind === "ok" ? "info-box" : "error-box"}>{msg.text}</div>}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div className="field" style={{ flex: 1, minWidth: 260 }}>
+          <label htmlFor="ls-report">Report ID</label>
+          <input
+            id="ls-report"
+            className="input"
+            value={reportId}
+            onChange={(e) => setReportId(e.target.value)}
+            placeholder="e.g. cmse..."
+            required
+          />
+        </div>
+        <div className="field" style={{ width: 100 }}>
+          <label htmlFor="ls-grade">Grade</label>
+          <select id="ls-grade" className="input" value={grade} onChange={(e) => setGrade(e.target.value as any)}>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="D">D</option>
+          </select>
+        </div>
+        <button className="btn btn-sm" disabled={busy || !reportId.trim()}>
+          {busy ? "Creating…" : "Create"}
+        </button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+        Placeholder pricing formula (marketplaceListing.ts) — 1.35× the trade-in offer. Not a pricing strategy.
+      </p>
+    </form>
   );
 }
 

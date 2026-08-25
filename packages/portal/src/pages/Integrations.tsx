@@ -24,7 +24,12 @@ import {
 import { useSession } from "../auth/SessionContext";
 import { AsyncBoundary, StatusBadge, formatDate, useApi } from "../components/common";
 
-const EVENT_TYPES = ["report.created", "dispute.received", "dispute.resolved"] as const;
+// Event types are fetched from GET /webhooks/event-types at runtime so
+// this list stays authoritative. Adding a new event on the API (see
+// integrations.ts's WEBHOOK_EVENT_TYPES) surfaces here on the next load,
+// without a portal build. A short static fallback keeps the UI usable if
+// the fetch itself fails.
+const FALLBACK_EVENT_TYPES = ["report.created", "dispute.received", "dispute.resolved"] as const;
 
 export function IntegrationsPage() {
   return (
@@ -200,6 +205,8 @@ function WebhooksSection() {
   const canManage = role !== "tenant_staff";
   const { data, loading, error, reload } = useApi(() => api.get<WebhookEndpointSummary[]>("/webhooks"));
   const endpoints = data ?? [];
+  const eventTypesQuery = useApi(() => api.get<string[]>("/webhooks/event-types"));
+  const eventTypes = eventTypesQuery.data ?? [...FALLBACK_EVENT_TYPES];
 
   const [creating, setCreating] = useState(false);
   const [url, setUrl] = useState("");
@@ -311,7 +318,7 @@ function WebhooksSection() {
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Event types</label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-              {EVENT_TYPES.map((evt) => (
+              {eventTypes.map((evt) => (
                 <label key={evt} style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400 }}>
                   <input type="checkbox" checked={selectedEvents.includes(evt)} onChange={() => toggleEvent(evt)} />
                   <code style={{ fontSize: 13 }}>{evt}</code>

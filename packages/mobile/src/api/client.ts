@@ -121,4 +121,64 @@ export async function createReport(token: string, input: CreateReportInput): Pro
   return response.json() as Promise<CreatedReport>;
 }
 
+// ============================================================
+// Batch intake — CLAUDE.md "Bulk batch intake". Same authentication
+// model as createReport (technician session, tenant taken from the
+// token, never from the request body).
+// ============================================================
+
+export interface BatchSession {
+  batchId: string;
+  sourceName: string;
+  profileId: string | null;
+  status: 'open' | 'closed';
+  deviceSerials: string[];
+  deviceCount: number;
+  createdAt: string;
+  closedAt: string | null;
+}
+
+export interface BatchScanResult {
+  batchId: string;
+  serialNumber: string;
+  alreadyPresent: boolean;
+  deviceCount: number;
+}
+
+export async function createBatch(
+  token: string,
+  input: { sourceName: string; profileId?: string | null },
+): Promise<BatchSession> {
+  const response = await fetch(`${API_BASE_URL}/batches`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new ApiError(await parseErrorMessage(response), response.status);
+  return response.json() as Promise<BatchSession>;
+}
+
+export async function addDeviceToBatch(
+  token: string,
+  batchId: string,
+  serialNumber: string,
+): Promise<BatchScanResult> {
+  const response = await fetch(`${API_BASE_URL}/batches/${encodeURIComponent(batchId)}/devices`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ serialNumber }),
+  });
+  if (!response.ok) throw new ApiError(await parseErrorMessage(response), response.status);
+  return response.json() as Promise<BatchScanResult>;
+}
+
+export async function closeBatch(token: string, batchId: string): Promise<BatchSession> {
+  const response = await fetch(`${API_BASE_URL}/batches/${encodeURIComponent(batchId)}/close`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new ApiError(await parseErrorMessage(response), response.status);
+  return response.json() as Promise<BatchSession>;
+}
+
 export { ApiError };

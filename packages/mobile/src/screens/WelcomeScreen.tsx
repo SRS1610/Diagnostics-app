@@ -57,6 +57,10 @@ export function WelcomeScreen({ navigation }: Props) {
         <Text style={styles.buttonText}>Start inspection</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity onPress={() => navigation.navigate('BatchStart')}>
+        <Text style={styles.link}>Run a batch instead (multiple devices, one source)</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity onPress={() => navigation.replace('ScanProfile')}>
         <Text style={styles.link}>Wrong program — re-scan the profile</Text>
       </TouchableOpacity>

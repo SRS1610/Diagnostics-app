@@ -25,6 +25,13 @@ export type RootStackParamList = {
   Results: undefined;
   YourOffer: undefined;
   Complete: { reportId: string } | undefined;
+  // Batch-intake alt flow — reachable from Welcome (via "Run a batch
+  // instead"). Independent of the per-device flow above; ends by
+  // closing the batch and returning to Welcome so the technician can
+  // start a new batch or a single-device inspection.
+  BatchStart: undefined;
+  BatchScan: { batchId: string };
+  BatchProgress: { batchId: string };
 };
 
 export const SCREEN_ORDER: (keyof RootStackParamList)[] = [
@@ -46,4 +53,7 @@ export const SCREEN_ORDER: (keyof RootStackParamList)[] = [
   'Results',
   'YourOffer',
   'Complete',
+  'BatchStart',
+  'BatchScan',
+  'BatchProgress',
 ];

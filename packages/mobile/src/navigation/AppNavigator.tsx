@@ -26,6 +26,7 @@ import {
   MotionTestScreen,
   SoundCheckScreen,
 } from '../screens/ChapterScreens';
+import { BatchProgressScreen, BatchScanScreen, BatchStartScreen } from '../screens/BatchScreens';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -48,6 +49,9 @@ const BUILT_SCREENS: Partial<Record<keyof RootStackParamList, React.ComponentTyp
   Results: ResultsScreen,
   YourOffer: YourOfferScreen,
   Complete: CompleteScreen,
+  BatchStart: BatchStartScreen,
+  BatchScan: BatchScanScreen,
+  BatchProgress: BatchProgressScreen,
 };
 
 export function AppNavigator() {
