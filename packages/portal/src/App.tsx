@@ -17,6 +17,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useSession } from "./auth/SessionContext";
 import { MasterShell, TenantShell } from "./components/Shell";
 import { LoginPage } from "./pages/Login";
+import { ForgotPasswordPage, ResetPasswordPage } from "./pages/PasswordRecovery";
 import { SsoCompletePage } from "./pages/SsoComplete";
 import { MasterConsolePage } from "./pages/MasterConsole";
 import { DashboardPage } from "./pages/Dashboard";
@@ -66,6 +67,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to={home} replace /> : <LoginPage />} />
+      {/* Reachable regardless of auth state — a locked-out user has no
+          session to check against, and the reset-token itself is what
+          authorizes the password change. */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       {/* Reachable regardless of auth state — the IdP redirect lands
           here before this browser tab has any session at all. */}
       <Route path="/sso/complete" element={<SsoCompletePage />} />

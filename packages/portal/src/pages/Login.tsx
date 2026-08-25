@@ -13,7 +13,7 @@
 // password alone here either — this isn't just hiding a screen.
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useSession } from "../auth/SessionContext";
 import { api, ApiError, type SsoStartResponse } from "../api/client";
 
@@ -235,6 +235,13 @@ export function LoginPage() {
         >
           Sign in with SSO
         </button>
+
+        <Link
+          to="/forgot-password"
+          style={{ display: "block", textAlign: "center", marginTop: 12, fontSize: 13 }}
+        >
+          Forgot your password?
+        </Link>
       </form>
     </div>
   );

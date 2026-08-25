@@ -307,6 +307,148 @@ interface TechnicianQaRow {
 // reports yet, so there is no signal. Rendering "0%" for a brand new
 // hire would put them at the top of a rate-sorted list they don't
 // belong on, which the aggregate endpoint documents explicitly.
+/**
+ * Add a technician. Portal-side create (mirrors the tenant admin adding
+ * a new hire, not the technician self-registering). badgeCode must be
+ * unique per tenant — the API returns 409 on collision with a specific
+ * message, which we surface as-is.
+ */
+function AddTechnicianForm({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [badgeCode, setBadgeCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post("/technicians", { displayName: displayName.trim(), badgeCode: badgeCode.trim() });
+      setDisplayName("");
+      setBadgeCode("");
+      setOpen(false);
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add this technician");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <button className="btn btn-sm" onClick={() => setOpen(true)}>Add technician</button>
+      </div>
+    );
+  }
+
+  return (
+    <form className="card" style={{ marginBottom: 12 }} onSubmit={submit}>
+      {error && <div className="error-box">{error}</div>}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div className="field" style={{ flex: 1, minWidth: 200 }}>
+          <label htmlFor="tn-name">Display name</label>
+          <input
+            id="tn-name"
+            className="input"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+          />
+        </div>
+        <div className="field" style={{ flex: 1, minWidth: 160 }}>
+          <label htmlFor="tn-badge">Badge code</label>
+          <input
+            id="tn-badge"
+            className="input"
+            value={badgeCode}
+            onChange={(e) => setBadgeCode(e.target.value)}
+            placeholder="e.g. TEC-1042"
+            required
+          />
+        </div>
+        <button className="btn btn-sm" disabled={busy || !displayName.trim() || !badgeCode.trim()}>
+          {busy ? "Adding…" : "Add"}
+        </button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Show the badge QR payload — the string a printed badge encodes, so a
+ * lost badge can be reprinted. Payload comes from
+ * generateTechnicianBadgePayload() server-side (tenantId:badgeCode); the
+ * portal only reveals it on demand rather than listing it in the roster
+ * table, same pattern as ConsumerLink.
+ */
+function BadgePayloadButton({ technicianId }: { technicianId: string }) {
+  const [payload, setPayload] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setBusy(true);
+    try {
+      const res = await api.get<{ payload: string }>(`/technicians/${technicianId}/badge-payload`);
+      setPayload(res.payload);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (payload) {
+    return (
+      <button
+        className="btn btn-secondary btn-sm"
+        title={payload}
+        onClick={() => {
+          void navigator.clipboard?.writeText(payload);
+        }}
+      >
+        Copy badge QR
+      </button>
+    );
+  }
+  return (
+    <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void load()}>
+      {busy ? "…" : "Show badge"}
+    </button>
+  );
+}
+
+/**
+ * Delete a technician. The API refuses if they have any attributed
+ * reports (409 with a specific remedy message pointing at Deactivate),
+ * which we surface. Confirms first — deletion is irreversible even
+ * though the API's refusal is the real safety net.
+ */
+function DeleteTechnicianButton({ technicianId, onDeleted }: { technicianId: string; onDeleted: () => void }) {
+  const [busy, setBusy] = useState(false);
+
+  const run = async () => {
+    if (!confirm("Delete this technician? Only technicians with zero reports can be deleted; otherwise deactivate.")) return;
+    setBusy(true);
+    try {
+      await api.delete(`/technicians/${technicianId}`);
+      onDeleted();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Could not delete");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => void run()}>
+      Delete
+    </button>
+  );
+}
+
 function formatRate(rate: number | null): string {
   if (rate === null) return "—";
   return `${(rate * 100).toFixed(1)}%`;
@@ -341,6 +483,8 @@ export function TeamPage() {
       <p className="page-sub">Technicians who can run inspections for this tenant</p>
 
       {actionError && <div className="error-box">{actionError}</div>}
+
+      <AddTechnicianForm onCreated={() => void reload()} />
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <AsyncBoundary loading={loading} error={error} isEmpty={technicians.length === 0} emptyMessage="No technicians yet.">
@@ -377,10 +521,12 @@ export function TeamPage() {
                       {formatRate(qa?.disputeRate ?? null)}
                     </td>
                     <td className="muted">{formatDate(t.createdAt)}</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td style={{ textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                      <BadgePayloadButton technicianId={t.technicianId} />
                       <button className="btn btn-secondary btn-sm" onClick={() => void setActive(t, !t.active)}>
                         {t.active ? "Deactivate" : "Reactivate"}
                       </button>
+                      <DeleteTechnicianButton technicianId={t.technicianId} onDeleted={() => void reload()} />
                     </td>
                   </tr>
                 );

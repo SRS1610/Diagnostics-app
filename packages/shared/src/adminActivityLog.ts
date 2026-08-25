@@ -63,6 +63,7 @@ export type ActivityAction =
   // Notifications
   | "notification_sent"
   | "notification_failed"
+  | "notification_skipped"
   // Privacy / right-to-deletion (GDPR/CCPA)
   | "consumer_data_erased";
 

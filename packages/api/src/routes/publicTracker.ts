@@ -267,6 +267,55 @@ router.get("/:token", publicReadRateLimit, async (req, res) => {
 });
 
 // ============================================================
+// Certificate — the QR-linked buyer-safe report summary.
+//
+// The tracker view above is designed for the CUSTOMER — it exposes offer,
+// dispute, contact-input toggles, all the interactive machinery of the
+// consumer flow. A QR code printed on the audit-report PDF and handed to a
+// resale buyer has a different shape entirely: read-only, no offer, no
+// dispute affordance, no "we have your email on file" hint. Just the
+// certified inspection.
+//
+// CLAUDE.md's "Public view shows device identity + grade + pass/flag
+// counts ONLY — never technician notes, redo history, or raw cosmetic
+// photos" is the shape encoded here. Same masking, same tenant-derivation
+// (from the token, never from the caller), same rate limit as the
+// tracker.
+// ============================================================
+
+router.get("/:token/certificate", publicReadRateLimit, async (req, res) => {
+  const report = await loadByToken(req.params.token);
+  if (!report) return res.status(404).json({ error: "This link is not valid." });
+  const counts = countResults(report.results);
+  res.json({
+    device: {
+      make: report.deviceMake,
+      model: report.deviceModel,
+      serialNumberMasked: maskIdentifier(report.serialNumber),
+      imeiMasked: maskIdentifier(report.imei),
+    },
+    inspection: {
+      inspectedAt: report.generatedAt,
+      overallStatus: report.overallStatus,
+      testsRun: counts.total,
+      testsPassed: counts.passed,
+      testsFlagged: counts.flagged,
+      testsSkipped: counts.skipped,
+    },
+    // Same rule as the tracker: only present when a wipe has actually
+    // been certified AND passed. Absence is absence, not "in progress".
+    dataErasure:
+      report.wipeCertificate && report.wipeCertificate.passed
+        ? {
+            wipedAt: report.wipeCertificate.wipedAt,
+            standard: report.wipeCertificate.standard,
+            certificateId: report.wipeCertificate.certificateId,
+          }
+        : null,
+  });
+});
+
+// ============================================================
 // Offer: accept / decline
 // ============================================================
 

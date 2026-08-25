@@ -255,6 +255,181 @@ export function TradeInPage() {
       <p className="page-sub" style={{ marginTop: 12 }}>
         Listing prices come from a placeholder markup formula, not a pricing strategy — see marketplaceListing.ts.
       </p>
+
+      {canAct && <PricingSection />}
+    </>
+  );
+}
+
+// ============================================================
+// Pricing — market_price_entries admin UI.
+//
+// Every quote is computed from these rows: model + storage → per-grade
+// base price. The page shows the current table read-only and lets an
+// admin edit prices inline. Uploading is a PUT of the whole edited set,
+// upserting per (model, storage). While no real price feed is connected,
+// this is the primary way a tenant moves off the seed data (which blocks
+// quote acceptance server-side) — same visibility rule as everything
+// else in this page: the block is stated, not hidden.
+// ============================================================
+
+interface PriceRow {
+  entryId?: string;
+  model: string;
+  storageGb: number;
+  gradeBasePrices: { A: number; B: number; C: number; D: number };
+  currency: string;
+  priceSource?: string;
+}
+
+function PricingSection() {
+  const query = useApi(() => api.get<PriceRow[]>("/quotes/prices"));
+  const rows = query.data ?? [];
+  const [edited, setEdited] = useState<Record<string, PriceRow>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [newRow, setNewRow] = useState<PriceRow>({
+    model: "",
+    storageGb: 128,
+    gradeBasePrices: { A: 0, B: 0, C: 0, D: 0 },
+    currency: "USD",
+  });
+
+  const keyOf = (r: PriceRow) => `${r.model}::${r.storageGb}`;
+  const merge = (r: PriceRow) => ({ ...r, ...edited[keyOf(r)] });
+
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    const draft = rows.map((r) => merge(r));
+    if (newRow.model.trim() && newRow.storageGb > 0) draft.push(newRow);
+    try {
+      await api.put("/quotes/prices", { prices: draft.map((r) => ({
+        model: r.model,
+        storageGb: r.storageGb,
+        gradeBasePrices: r.gradeBasePrices,
+        currency: r.currency,
+      })) });
+      setMsg({ kind: "ok", text: `Saved ${draft.length} price row(s).` });
+      setEdited({});
+      setNewRow({ model: "", storageGb: 128, gradeBasePrices: { A: 0, B: 0, C: 0, D: 0 }, currency: "USD" });
+      await query.reload();
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Could not save prices" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <h2 style={{ fontSize: 15, margin: "24px 0 10px" }}>Pricing</h2>
+      <p className="page-sub" style={{ marginBottom: 10 }}>
+        Base price per (model, storage, grade). A quote priced from seed data is blocked from acceptance server-side — replace those rows here to unblock offers.
+      </p>
+      {msg && <div className={msg.kind === "ok" ? "info-box" : "error-box"}>{msg.text}</div>}
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <AsyncBoundary
+          loading={query.loading}
+          error={query.error}
+          isEmpty={rows.length === 0}
+          emptyMessage="No prices uploaded yet. Add the first row below."
+        >
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Storage (GB)</th>
+                <th>A</th>
+                <th>B</th>
+                <th>C</th>
+                <th>D</th>
+                <th>Currency</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const k = keyOf(r);
+                const merged = merge(r);
+                const setField = (patch: Partial<PriceRow>) =>
+                  setEdited((prev) => ({ ...prev, [k]: { ...merged, ...patch } }));
+                const setGrade = (g: "A" | "B" | "C" | "D", v: number) =>
+                  setField({ gradeBasePrices: { ...merged.gradeBasePrices, [g]: v } });
+                return (
+                  <tr key={k}>
+                    <td>{r.model}</td>
+                    <td className="muted">{r.storageGb}</td>
+                    {(["A", "B", "C", "D"] as const).map((g) => (
+                      <td key={g}>
+                        <input
+                          className="input"
+                          type="number"
+                          min={0}
+                          value={merged.gradeBasePrices[g]}
+                          onChange={(e) => setGrade(g, Number(e.target.value) || 0)}
+                          style={{ width: 90 }}
+                        />
+                      </td>
+                    ))}
+                    <td className="muted">{r.currency}</td>
+                    <td className="muted" style={{ fontSize: 12 }}>{r.priceSource ?? "—"}</td>
+                  </tr>
+                );
+              })}
+              <tr>
+                <td>
+                  <input
+                    className="input"
+                    placeholder="e.g. iPhone 13"
+                    value={newRow.model}
+                    onChange={(e) => setNewRow({ ...newRow, model: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1}
+                    value={newRow.storageGb}
+                    onChange={(e) => setNewRow({ ...newRow, storageGb: Number(e.target.value) || 0 })}
+                    style={{ width: 90 }}
+                  />
+                </td>
+                {(["A", "B", "C", "D"] as const).map((g) => (
+                  <td key={g}>
+                    <input
+                      className="input"
+                      type="number"
+                      min={0}
+                      value={newRow.gradeBasePrices[g]}
+                      onChange={(e) => setNewRow({
+                        ...newRow,
+                        gradeBasePrices: { ...newRow.gradeBasePrices, [g]: Number(e.target.value) || 0 },
+                      })}
+                      style={{ width: 90 }}
+                    />
+                  </td>
+                ))}
+                <td>
+                  <input
+                    className="input"
+                    value={newRow.currency}
+                    onChange={(e) => setNewRow({ ...newRow, currency: e.target.value.toUpperCase() })}
+                    style={{ width: 70 }}
+                  />
+                </td>
+                <td className="muted">new</td>
+              </tr>
+            </tbody>
+          </table>
+        </AsyncBoundary>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <button className="btn btn-sm" disabled={busy} onClick={save}>
+          {busy ? "Saving…" : "Save prices"}
+        </button>
+      </div>
     </>
   );
 }

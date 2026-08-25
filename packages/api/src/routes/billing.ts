@@ -19,9 +19,10 @@
 // off on the FIRST failure would be harsher than Stripe's own default
 // behavior for a problem that often resolves itself (an expired card
 // auto-updated, a temporary decline). "past_due" is a status
-// checkLicense() (licensing.ts) does not currently special-case — until
-// it does, a past_due license behaves like any non-"active" one for
-// checkLicense()'s gate, which is the conservative direction to fail in.
+// checkLicense() (licensing.ts) now special-cases past_due with its own
+// reason string so the portal / mobile block screen tells the tenant
+// exactly what to fix (update payment method) rather than the generic
+// "license inactive" it would otherwise fall through to.
 
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";

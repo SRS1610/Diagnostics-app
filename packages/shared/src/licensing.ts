@@ -18,7 +18,7 @@ export type LicenseType =
   | "tiered_subscription" // monthly/annual, included quota + overage billing
   | "enterprise_unlimited"; // flat fee, no per-use limit
 
-export type LicenseStatus = "active" | "expired" | "suspended" | "quota_exceeded";
+export type LicenseStatus = "active" | "past_due" | "expired" | "suspended" | "quota_exceeded";
 
 export interface License {
   licenseId: string;
@@ -56,6 +56,13 @@ export function checkLicense(license: License): LicenseCheckResult {
   }
   if (license.status === "expired") {
     return { allowed: false, reason: "This organization's license has expired. Renewal required to continue." };
+  }
+  // Set by billing.ts when Stripe reports a failed renewal charge. Blocks
+  // in the same shape as expired/suspended — the distinct reason lets the
+  // portal (and the mobile app's block screen) tell the technician exactly
+  // what to fix, which "not active" alone did not.
+  if (license.status === "past_due") {
+    return { allowed: false, reason: "Payment for this organization's license failed. Update the payment method to resume inspections." };
   }
 
   if (license.type === "per_inspection" || license.type === "tiered_subscription") {

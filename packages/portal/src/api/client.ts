@@ -384,3 +384,24 @@ export interface Dispute {
   submittedAt: string;
   resolvedAt: string | null;
 }
+
+export interface ReportRevision {
+  revisionId: string;
+  reportId: string;
+  revisionNumber: number;
+  revisedByTechnicianId: string;
+  testIdsRedone: string[];
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface WipeCertificate {
+  certificateId: string;
+  reportId: string;
+  deviceSerial: string;
+  imei: string;
+  standard: string;
+  verifiedByTechnicianId: string;
+  passed: boolean;
+  wipedAt: string;
+}
