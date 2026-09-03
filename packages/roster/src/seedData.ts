@@ -17,11 +17,19 @@ export const OUTLETS: Outlet[] = [
 ];
 
 // Two shift templates per outlet: Morning and Evening, split roughly at
-// the middle of the operating hours. Role coverage scales a little with
-// court count (more courts -> more reception/coaching demand).
+// the middle of the operating hours.
+//
+// Roles are deliberately NOT required on both shifts for duty_manager
+// and coach: one duty manager opens the venue and one senior
+// receptionist closes it (two dedicated full-shift duty-manager slots
+// a day is more headcount than a 5-8 court venue actually runs), and
+// coaching sessions are scheduled for the evening block only. Reception
+// and maintenance keep their original per-shift/morning-only pattern.
+// This keeps demand realistic against the staff pool in
+// buildStaffForOutlet below instead of structurally understaffing every
+// outlet regardless of headcount.
 export function shiftTemplatesForOutlet(outlet: Outlet): ShiftTemplate[] {
   const mid = Math.round((outlet.opensAt + outlet.closesAt) / 2);
-  const receptionPerShift = outlet.courts >= 7 ? 2 : 1;
   return [
     {
       shiftTemplateId: `${outlet.outletId}-morning`,
@@ -29,7 +37,7 @@ export function shiftTemplatesForOutlet(outlet: Outlet): ShiftTemplate[] {
       label: "Morning",
       startHour: outlet.opensAt,
       endHour: mid,
-      requiredRoles: { duty_manager: 1, reception: receptionPerShift, coach: 1, maintenance: 1 },
+      requiredRoles: { duty_manager: 1, reception: 1, maintenance: 1 },
     },
     {
       shiftTemplateId: `${outlet.outletId}-evening`,
@@ -37,7 +45,7 @@ export function shiftTemplatesForOutlet(outlet: Outlet): ShiftTemplate[] {
       label: "Evening",
       startHour: mid,
       endHour: outlet.closesAt,
-      requiredRoles: { duty_manager: 1, reception: receptionPerShift, coach: 1 },
+      requiredRoles: { reception: 1, coach: 1 },
     },
   ];
 }
@@ -62,13 +70,20 @@ function name(seed: number): string {
 // Availability patterns, expressed as which weekdays a staff member can
 // ever work (before leave). Casuals skew to fewer days; full-timers
 // cover most of the week but still get a guaranteed day off.
+//
+// Each tuple is indexed [Sun, Mon, Tue, Wed, Thu, Fri, Sat] to match
+// Weekday/Date#getDay() (0 = Sunday) — NOT [Mon..Sun]. Getting this
+// off by one silently shifts every pattern by a day and can leave a
+// whole weekday (e.g. every Friday/Saturday) with no eligible staff
+// across an entire outlet, which shows up as a wall of "understaffed"
+// warnings that looks like a capacity problem but isn't one.
 const AVAILABILITY_PATTERNS: Array<[number, number, number, number, number, number, number]> = [
-  [1, 1, 1, 1, 1, 0, 0], // Mon-Fri
-  [0, 1, 1, 1, 1, 1, 0], // Tue-Sat
-  [1, 0, 1, 1, 1, 1, 0], // Mon,Wed-Sat
-  [1, 1, 0, 1, 1, 0, 1], // Mon,Tue,Thu,Fri,Sun
-  [0, 0, 1, 1, 1, 1, 1], // Wed-Sun
-  [1, 1, 1, 0, 0, 1, 1], // Mon,Tue,Wed,Sat,Sun
+  [0, 1, 1, 1, 1, 1, 0], // Mon-Fri
+  [0, 0, 1, 1, 1, 1, 1], // Tue-Sat
+  [0, 1, 0, 1, 1, 1, 1], // Mon,Wed-Sat
+  [1, 1, 1, 0, 1, 1, 0], // Mon,Tue,Thu,Fri,Sun
+  [1, 0, 0, 1, 1, 1, 1], // Wed-Sun
+  [1, 1, 1, 1, 0, 0, 1], // Mon,Tue,Wed,Sat,Sun
 ];
 
 function availableDays(patternIndex: number): number[] {
@@ -80,17 +95,27 @@ function availableDays(patternIndex: number): number[] {
   return days;
 }
 
-// Roughly 7 staff per outlet: 1 duty manager (full-time), 2 reception,
-// 2 coaches, 1-2 maintenance/casual — enough headroom that the
-// generator can usually fill every slot without going understaffed.
+// 12 staff per outlet, sized against the weekly demand implied by
+// shiftTemplatesForOutlet (7 duty-manager shifts/wk, 14 reception, 7
+// coach, 7 maintenance): enough combined weekly-hour capacity per role,
+// spread across full-time/part-time/casual so availableDays patterns
+// overlap into most weekdays, that the generator fills the large
+// majority of slots — a few understaffed gaps on top of that are
+// realistic and are exactly what the warnings panel is for, not a sign
+// the seed data is broken.
 export function buildStaffForOutlet(outlet: Outlet, seedOffset: number): StaffMember[] {
   const roster: Array<{ role: StaffMember["role"]; employmentType: StaffMember["employmentType"]; maxHoursPerWeek: number }> = [
     { role: "duty_manager", employmentType: "full_time", maxHoursPerWeek: 38 },
+    { role: "duty_manager", employmentType: "part_time", maxHoursPerWeek: 24 },
+    { role: "reception", employmentType: "full_time", maxHoursPerWeek: 38 },
     { role: "reception", employmentType: "full_time", maxHoursPerWeek: 38 },
     { role: "reception", employmentType: "part_time", maxHoursPerWeek: 24 },
-    { role: "coach", employmentType: "part_time", maxHoursPerWeek: 20 },
+    { role: "reception", employmentType: "casual", maxHoursPerWeek: 16 },
+    { role: "coach", employmentType: "full_time", maxHoursPerWeek: 38 },
+    { role: "coach", employmentType: "part_time", maxHoursPerWeek: 24 },
     { role: "coach", employmentType: "casual", maxHoursPerWeek: 16 },
-    { role: "maintenance", employmentType: "part_time", maxHoursPerWeek: 20 },
+    { role: "maintenance", employmentType: "part_time", maxHoursPerWeek: 24 },
+    { role: "maintenance", employmentType: "casual", maxHoursPerWeek: 16 },
     { role: "maintenance", employmentType: "casual", maxHoursPerWeek: 12 },
   ];
 

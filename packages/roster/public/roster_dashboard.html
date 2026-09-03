@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff Roster — Badminton Outlets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-soft: #f5f5f7; --line: #e5e5ea;
+    --accent: #1c8a5e; --accent-soft: #e6f6ee; --accent-dark: #0f6b46;
+    --blue: #2f6fed; --blue-soft: #eaf1ff;
+    --success: #34c759; --success-soft: #e8f9ec;
+    --warn: #ff9f0a; --warn-soft: #fff4e5;
+    --fail: #ff3b30; --fail-soft: #ffe9e8;
+    --text: #1d1d1f; --text-muted: #6e6e73; --text-faint: #a1a1a6;
+    --font: 'Inter', -apple-system, sans-serif;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #d7d7db; border-radius: 100px; }
+
+  .app { display: flex; min-height: 100vh; }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar { width: 240px; background: var(--panel); border-right: 1px solid var(--line); flex-shrink: 0; padding: 22px 14px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 24px; }
+  .brand-mark { width: 28px; height: 28px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent-dark)); display:flex; align-items:center; justify-content:center; }
+  .brand-mark svg { width: 16px; height: 16px; }
+  .brand-name { font-weight: 800; font-size: 14px; letter-spacing: -0.01em; line-height: 1.2; }
+  .brand-name small { display: block; font-weight: 500; color: var(--text-faint); font-size: 10.5px; }
+
+  .sidebar-label { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); padding: 0 10px; margin: 14px 0 8px; }
+  .outlet-item { display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 3px; cursor: pointer; border: 1px solid transparent; transition: background .12s, color .12s; }
+  .outlet-item:hover { background: var(--panel-soft); }
+  .outlet-item.active { background: var(--accent-soft); color: var(--accent-dark); font-weight: 700; }
+  .outlet-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .outlet-item.active .outlet-dot { box-shadow: 0 0 0 3px var(--accent-soft); }
+  .outlet-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .outlet-item .warn-pill { font-size: 10px; font-weight: 700; background: var(--fail); color: #fff; border-radius: 100px; padding: 1px 6px; }
+
+  .sidebar-footer { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid var(--line); font-size: 11px; color: var(--text-faint); line-height: 1.5; }
+
+  /* ---------- Main ---------- */
+  .main { flex: 1; padding: 26px 34px 60px; max-width: 1320px; min-width: 0; }
+  .topbar { display:flex; justify-content:space-between; align-items:flex-start; gap: 20px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; margin: 0; }
+  .topbar .sub { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+  .topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px; padding: 9px 16px; border-radius: 100px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; transition: transform .08s, box-shadow .12s, background .12s; font-family: var(--font); }
+  .btn:hover { background: var(--panel-soft); }
+  .btn:active { transform: scale(.97); }
+  .btn svg { width: 13px; height: 13px; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-ghost { border-color: transparent; }
+  select.btn, input.btn { appearance: none; cursor: pointer; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin: 22px 0; }
+  .stat-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .stat-card .lbl { font-size: 11px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
+  .stat-card .val { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat-card.warn .val { color: var(--warn); }
+  .stat-card.fail .val { color: var(--fail); }
+
+  .banner { display: flex; align-items: center; gap: 10px; background: var(--warn-soft); border: 1px solid #ffe1b0; color: #935100; border-radius: 12px; padding: 12px 16px; font-size: 12.5px; font-weight: 600; margin-bottom: 18px; }
+  .banner svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .banner button { margin-left: auto; }
+
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  .month-switch { display: flex; align-items: center; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 100px; padding: 4px; }
+  .month-switch button { border: none; background: transparent; width: 28px; height: 28px; border-radius: 50%; display:flex; align-items:center; justify-content:center; cursor: pointer; color: var(--text-muted); }
+  .month-switch button:hover { background: var(--panel-soft); }
+  .month-switch .label { font-size: 13px; font-weight: 700; padding: 0 10px; min-width: 128px; text-align: center; }
+
+  .legend { display: flex; gap: 14px; align-items: center; font-size: 11.5px; color: var(--text-muted); flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-swatch { width: 9px; height: 9px; border-radius: 3px; }
+
+  /* ---------- Calendar ---------- */
+  .cal-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-weekday { font-size: 10.5px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; padding: 10px 10px 8px; border-bottom: 1px solid var(--line); background: var(--panel-soft); text-align: center; }
+  .cal-day { min-height: 118px; border-right: 1px solid var(--panel-soft); border-bottom: 1px solid var(--panel-soft); padding: 8px; position: relative; transition: background .1s; }
+  .cal-day:nth-child(7n) { border-right: none; }
+  .cal-day.empty { background: repeating-linear-gradient(135deg, #fafafa, #fafafa 6px, #f5f5f5 6px, #f5f5f5 12px); }
+  .cal-day .daynum { font-size: 11.5px; font-weight: 700; color: var(--text-faint); margin-bottom: 6px; }
+  .cal-day.today .daynum { color: #fff; background: var(--accent); width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .shift-chip { display: flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 600; border-radius: 6px; padding: 3px 6px; margin-bottom: 3px; cursor: pointer; border: 1px solid transparent; }
+  .shift-chip:hover { filter: brightness(0.97); transform: translateX(1px); }
+  .shift-chip .role-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .shift-chip.morning { background: var(--blue-soft); color: #1c4fbf; }
+  .shift-chip.evening { background: #f1e9ff; color: #6b32c9; }
+  .shift-chip.gap { background: var(--fail-soft); color: #b3261e; border-color: #f6c9c6; font-style: italic; }
+  .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- Panels below calendar ---------- */
+  .panels { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; margin-top: 22px; align-items: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+  .card-head h3 { margin: 0; font-size: 14px; font-weight: 700; }
+  .card-body { padding: 6px 0; max-height: 360px; overflow-y: auto; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 10.5px; color: var(--text-faint); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 9px 18px; border-bottom: 1px solid var(--line); background: var(--panel-soft); position: sticky; top: 0; }
+  td { padding: 10px 18px; border-bottom: 1px solid var(--panel-soft); font-size: 12.5px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  .staff-cell { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--panel-soft); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; color: var(--text-muted); flex-shrink: 0; }
+  .staff-name { font-weight: 600; }
+  .staff-role { color: var(--text-faint); font-size: 11px; }
+  .role-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 100px; background: var(--panel-soft); color: var(--text-muted); }
+  .hours-bar-track { width: 60px; height: 6px; background: var(--panel-soft); border-radius: 100px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
+  .hours-bar-fill { height: 100%; border-radius: 100px; background: var(--accent); }
+
+  .empty-state { padding: 30px 18px; text-align: center; color: var(--text-faint); font-size: 12.5px; }
+
+  .warn-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 18px; border-bottom: 1px solid var(--panel-soft); font-size: 12px; }
+  .warn-row:last-child { border-bottom: none; }
+  .warn-row svg { width: 14px; height: 14px; color: var(--fail); flex-shrink: 0; margin-top: 1px; }
+  .warn-row .msg { color: var(--text); }
+  .warn-row .meta { color: var(--text-faint); font-size: 10.5px; margin-top: 2px; }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(15,15,20,.35); backdrop-filter: blur(2px); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .modal-overlay.open { display: flex; animation: fade .15s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal { width: 380px; background: var(--panel); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.25); padding: 22px; transform: translateY(8px); animation: rise .18s ease forwards; }
+  @keyframes rise { to { transform: translateY(0); } }
+  .modal h2 { margin: 0 0 4px; font-size: 16px; font-weight: 800; }
+  .modal .modal-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+  .field input, .field select, .field textarea { width: 100%; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--line); font-family: var(--font); font-size: 13px; background: var(--panel-soft); }
+  .field textarea { resize: vertical; min-height: 56px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .modal-close { position: absolute; top: 16px; right: 16px; }
+
+  /* ---------- Toast ---------- */
+  .toast-stack { position: fixed; bottom: 22px; right: 22px; display: flex; flex-direction: column; gap: 8px; z-index: 100; }
+  .toast { background: var(--text); color: #fff; padding: 11px 16px; border-radius: 10px; font-size: 12.5px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.2); display: flex; align-items: center; gap: 8px; animation: slideIn .18s ease; max-width: 320px; }
+  .toast.error { background: var(--fail); }
+  .toast.success { background: var(--accent-dark); }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+
+  .spinner { width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-overlay { position: absolute; inset: 0; background: rgba(255,255,255,.7); display: none; align-items: center; justify-content: center; border-radius: 14px; z-index: 5; }
+  .loading-overlay.show { display: flex; }
+  .loading-overlay .spinner { border-color: rgba(28,138,94,.2); border-top-color: var(--accent); width: 22px; height: 22px; }
+
+  @media (max-width: 980px) {
+    .panels { grid-template-columns: 1fr; }
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18 9 9 0 0 1 0-18z" opacity="0"/><path d="M8 21l8-18"/><circle cx="12" cy="12" r="1.6" fill="#fff" stroke="none"/></svg>
+      </div>
+      <div class="brand-name">Shuttle Roster<small>6 Melbourne outlets</small></div>
+    </div>
+
+    <div class="sidebar-label">Outlets</div>
+    <div id="outletList"></div>
+
+    <div class="sidebar-label">Year</div>
+    <div class="field" style="padding:0 10px;">
+      <select id="yearSelect" class="btn" style="width:100%; justify-content: space-between;"></select>
+    </div>
+
+    <div class="sidebar-footer">
+      In-memory demo data — regenerating a year replaces that year's shifts. Fictional outlets/staff, not real venues.
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="outletTitle">Loading…</h1>
+        <div class="sub" id="outletSub">&nbsp;</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn" id="leaveBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Request leave
+        </button>
+        <button class="btn btn-primary" id="generateBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+          Generate year
+        </button>
+      </div>
+    </div>
+
+    <div id="warningBanner" class="banner" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+      <span id="warningBannerText"></span>
+      <button class="btn btn-ghost" id="scrollToWarnings" style="padding:5px 10px;">View</button>
+    </div>
+
+    <div class="stat-row" id="statRow"></div>
+
+    <div class="toolbar">
+      <div class="month-switch">
+        <button id="prevMonth" aria-label="Previous month">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="label" id="monthLabel">—</div>
+        <button id="nextMonth" aria-label="Next month">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-swatch" style="background:#2f6fed;"></span>Morning shift</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#8b3fe8;"></span>Evening shift</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--fail);"></span>Unfilled slot</div>
+        <div class="legend-item" style="color:var(--text-faint);">Click a shift to swap it</div>
+      </div>
+    </div>
+
+    <div class="cal-card" style="position:relative;">
+      <div class="loading-overlay" id="calLoading"><div class="spinner"></div></div>
+      <div class="cal-grid" id="calWeekdays"></div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+    <div class="panels">
+      <div class="card">
+        <div class="card-head">
+          <h3>Staff at this outlet</h3>
+          <span class="sub" id="staffCount" style="font-size:11px;color:var(--text-faint);"></span>
+        </div>
+        <div class="card-body">
+          <table>
+            <thead><tr><th>Staff</th><th>Role</th><th>Employment</th><th>Weekly cap</th></tr></thead>
+            <tbody id="staffTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="warningsCard">
+        <div class="card-head">
+          <h3>Coverage warnings</h3>
+          <span class="sub" id="warningCount" style="font-size:11px;color:var(--text-faint);"></span>
+        </div>
+        <div class="card-body" id="warningsBody">
+          <div class="empty-state">No warnings yet — generate a year to check coverage.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Leave request modal -->
+<div class="modal-overlay" id="leaveModalOverlay">
+  <div class="modal" style="position:relative;">
+    <button class="btn btn-ghost modal-close" id="closeLeaveModal" style="padding:4px 8px;">✕</button>
+    <h2>Request leave</h2>
+    <div class="modal-sub">Approving leave clears the staff member off any generated shifts in that window.</div>
+    <div class="field">
+      <label>Staff member</label>
+      <select id="leaveStaffSelect"></select>
+    </div>
+    <div class="field">
+      <label>Start date</label>
+      <input type="date" id="leaveStart">
+    </div>
+    <div class="field">
+      <label>End date</label>
+      <input type="date" id="leaveEnd">
+    </div>
+    <div class="field">
+      <label>Reason (optional)</label>
+      <textarea id="leaveReason" placeholder="Annual leave, sick leave, etc."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelLeave">Cancel</button>
+      <button class="btn btn-primary" id="submitLeave">Submit &amp; approve</button>
+    </div>
+  </div>
+</div>
+
+<!-- Swap modal -->
+<div class="modal-overlay" id="swapModalOverlay">
+  <div class="modal" style="position:relative;">
+    <button class="btn btn-ghost modal-close" id="closeSwapModal" style="padding:4px 8px;">✕</button>
+    <h2>Swap shift</h2>
+    <div class="modal-sub" id="swapFromDesc"></div>
+    <div class="field">
+      <label>Swap with another shift (same role)</label>
+      <select id="swapTargetSelect"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelSwap">Cancel</button>
+      <button class="btn btn-primary" id="submitSwap">Swap</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script>
+const API = "";
+const ROLE_LABEL = { duty_manager: "Duty Manager", reception: "Reception", coach: "Coach", maintenance: "Maintenance" };
+const ROLE_COLOR = { duty_manager: "#1c8a5e", reception: "#2f6fed", coach: "#8b3fe8", maintenance: "#ff9f0a" };
+
+let state = {
+  outlets: [],
+  staff: [],
+  shiftTemplates: [],
+  activeOutletId: null,
+  year: new Date().getFullYear(),
+  monthIndex: 0, // 0-11
+  assignments: [],
+  warnings: [],
+  swapFrom: null,
+};
+
+function initial(name) {
+  return name.split(" ").map(p => p[0]).slice(0,2).join("").toUpperCase();
+}
+
+async function api(path, opts) {
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", ...(opts && opts.headers) },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+function toast(message, type = "default") {
+  const stack = document.getElementById("toastStack");
+  const el = document.createElement("div");
+  el.className = "toast" + (type !== "default" ? " " + type : "");
+  el.textContent = message;
+  stack.appendChild(el);
+  setTimeout(() => { el.style.opacity = "0"; el.style.transition = "opacity .2s"; setTimeout(() => el.remove(), 200); }, 3200);
+}
+
+async function loadStatic() {
+  const [outlets, staff, templates] = await Promise.all([
+    api("/outlets"),
+    api("/staff"),
+    api("/roster/shift-templates"),
+  ]);
+  state.outlets = outlets;
+  state.staff = staff;
+  state.shiftTemplates = templates;
+  state.activeOutletId = outlets[0]?.outletId ?? null;
+
+  const yearSelect = document.getElementById("yearSelect");
+  const now = new Date().getFullYear();
+  yearSelect.innerHTML = "";
+  for (let y = now - 1; y <= now + 3; y++) {
+    const opt = document.createElement("option");
+    opt.value = y; opt.textContent = y;
+    if (y === state.year) opt.selected = true;
+    yearSelect.appendChild(opt);
+  }
+  yearSelect.addEventListener("change", () => { state.year = Number(yearSelect.value); refreshAll(); });
+
+  renderOutletList();
+}
+
+function renderOutletList() {
+  const list = document.getElementById("outletList");
+  list.innerHTML = "";
+  for (const outlet of state.outlets) {
+    const warnCount = state.activeOutletId === outlet.outletId ? state.warnings.length : null;
+    const item = document.createElement("div");
+    item.className = "outlet-item" + (outlet.outletId === state.activeOutletId ? " active" : "");
+    item.innerHTML = `
+      <span class="outlet-dot"></span>
+      <span class="name">${outlet.name}</span>
+      ${warnCount ? `<span class="warn-pill">${warnCount}</span>` : ""}
+    `;
+    item.addEventListener("click", () => {
+      if (state.activeOutletId === outlet.outletId) return;
+      state.activeOutletId = outlet.outletId;
+      refreshAll();
+    });
+    list.appendChild(item);
+  }
+}
+
+function activeOutlet() {
+  return state.outlets.find(o => o.outletId === state.activeOutletId);
+}
+
+function monthKey() {
+  return `${state.year}-${String(state.monthIndex + 1).padStart(2, "0")}`;
+}
+
+async function refreshAll() {
+  renderOutletList();
+  const outlet = activeOutlet();
+  if (!outlet) return;
+  document.getElementById("outletTitle").textContent = outlet.name;
+  document.getElementById("outletSub").textContent = `${outlet.suburb} · ${outlet.courts} courts · ${outlet.opensAt}:00–${outlet.closesAt}:00`;
+  document.getElementById("calLoading").classList.add("show");
+
+  try {
+    const [assignments, warnings] = await Promise.all([
+      api(`/roster/assignments?outletId=${outlet.outletId}&month=${monthKey()}`),
+      api(`/roster/warnings?outletId=${outlet.outletId}`),
+    ]);
+    state.assignments = assignments;
+    state.warnings = warnings;
+  } catch (e) {
+    toast(e.message, "error");
+  } finally {
+    document.getElementById("calLoading").classList.remove("show");
+  }
+
+  renderMonthLabel();
+  renderCalendar();
+  renderStats();
+  renderStaffTable();
+  renderWarnings();
+  renderOutletList();
+}
+
+function renderMonthLabel() {
+  const label = new Date(state.year, state.monthIndex, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  document.getElementById("monthLabel").textContent = label;
+}
+
+function staffById(id) {
+  return state.staff.find(s => s.staffId === id);
+}
+
+function templateById(id) {
+  return state.shiftTemplates.find(t => t.shiftTemplateId === id);
+}
+
+function renderCalendar() {
+  const weekdaysEl = document.getElementById("calWeekdays");
+  weekdaysEl.innerHTML = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => `<div class="cal-weekday">${d}</div>`).join("");
+
+  const grid = document.getElementById("calGrid");
+  grid.innerHTML = "";
+
+  const firstOfMonth = new Date(Date.UTC(state.year, state.monthIndex, 1));
+  const daysInMonth = new Date(Date.UTC(state.year, state.monthIndex + 1, 0)).getUTCDate();
+  const leadingBlanks = (firstOfMonth.getUTCDay() + 6) % 7; // Mon=0
+
+  const todayISO = new Date().toISOString().slice(0, 10);
+
+  const byDate = new Map();
+  for (const a of state.assignments) {
+    const list = byDate.get(a.date) ?? [];
+    list.push(a);
+    byDate.set(a.date, list);
+  }
+
+  for (let i = 0; i < leadingBlanks; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cal-day empty";
+    grid.appendChild(cell);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateISO = `${state.year}-${String(state.monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const cell = document.createElement("div");
+    cell.className = "cal-day" + (dateISO === todayISO ? " today" : "");
+
+    const num = document.createElement("div");
+    num.className = "daynum";
+    num.textContent = day;
+    cell.appendChild(num);
+
+    const dayAssignments = (byDate.get(dateISO) ?? []).sort((a, b) => {
+      const ta = templateById(a.shiftTemplateId), tb = templateById(b.shiftTemplateId);
+      return (ta?.startHour ?? 0) - (tb?.startHour ?? 0);
+    });
+
+    for (const a of dayAssignments) {
+      const template = templateById(a.shiftTemplateId);
+      const chip = document.createElement("div");
+      const isGap = !a.staffId;
+      chip.className = "shift-chip " + (isGap ? "gap" : (template?.label === "Morning" ? "morning" : "evening"));
+      const person = a.staffId ? staffById(a.staffId) : null;
+      chip.innerHTML = `<span class="role-dot" style="background:${ROLE_COLOR[a.role]}"></span><span class="chip-name">${isGap ? "Unfilled " + ROLE_LABEL[a.role] : person?.name ?? "?"}</span>`;
+      chip.title = `${template?.label ?? ""} · ${ROLE_LABEL[a.role]}${person ? " · " + person.name : " · needs coverage"}`;
+      if (!isGap) chip.addEventListener("click", () => openSwapModal(a));
+      cell.appendChild(chip);
+    }
+
+    grid.appendChild(cell);
+  }
+}
+
+function renderStats() {
+  const total = state.assignments.length;
+  const filled = state.assignments.filter(a => a.staffId).length;
+  const gaps = total - filled;
+  const onLeave = state.assignments.filter(a => a.status === "on_leave_covered").length;
+  const staffCount = state.staff.filter(s => s.homeOutletId === state.activeOutletId).length;
+
+  const stats = [
+    { label: "Shifts this month", value: total },
+    { label: "Filled", value: filled },
+    { label: "Unfilled", value: gaps, cls: gaps > 0 ? "fail" : "" },
+    { label: "Leave-affected", value: onLeave, cls: onLeave > 0 ? "warn" : "" },
+    { label: "Staff at outlet", value: staffCount },
+  ];
+
+  document.getElementById("statRow").innerHTML = stats.map(s => `
+    <div class="stat-card ${s.cls ?? ""}">
+      <div class="lbl">${s.label}</div>
+      <div class="val">${s.value}</div>
+    </div>
+  `).join("");
+
+  const banner = document.getElementById("warningBanner");
+  if (gaps > 0) {
+    banner.style.display = "flex";
+    document.getElementById("warningBannerText").textContent = `${gaps} shift${gaps === 1 ? "" : "s"} this month have no one scheduled.`;
+  } else {
+    banner.style.display = "none";
+  }
+}
+
+function renderStaffTable() {
+  const staff = state.staff.filter(s => s.homeOutletId === state.activeOutletId);
+  document.getElementById("staffCount").textContent = `${staff.length} people`;
+  document.getElementById("staffTableBody").innerHTML = staff.map(s => `
+    <tr>
+      <td>
+        <div class="staff-cell">
+          <div class="avatar">${initial(s.name)}</div>
+          <div>
+            <div class="staff-name">${s.name}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="role-badge"><span style="width:6px;height:6px;border-radius:50%;background:${ROLE_COLOR[s.role]};display:inline-block;"></span>${ROLE_LABEL[s.role]}</span></td>
+      <td class="staff-role" style="text-transform:capitalize;">${s.employmentType.replace("_"," ")}</td>
+      <td>${s.maxHoursPerWeek}h/wk</td>
+    </tr>
+  `).join("") || `<tr><td colspan="4"><div class="empty-state">No staff assigned to this outlet.</div></td></tr>`;
+}
+
+function renderWarnings() {
+  const body = document.getElementById("warningsBody");
+  document.getElementById("warningCount").textContent = state.warnings.length ? `${state.warnings.length} open` : "";
+  if (!state.warnings.length) {
+    body.innerHTML = `<div class="empty-state">No warnings — every shift this outlet needs is covered.</div>`;
+    return;
+  }
+  body.innerHTML = state.warnings
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 200)
+    .map(w => `
+      <div class="warn-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+        <div>
+          <div class="msg">${w.message}</div>
+          <div class="meta">${w.date} · ${ROLE_LABEL[w.role]}</div>
+        </div>
+      </div>
+    `).join("");
+}
+
+/* ---------- Generate year ---------- */
+document.getElementById("generateBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("generateBtn");
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Generating…`;
+  try {
+    const result = await api("/roster/generate", { method: "POST", body: JSON.stringify({ year: state.year }) });
+    toast(`Generated ${result.assignmentsCreated} shifts for ${state.year}${result.warnings.length ? ` — ${result.warnings.length} coverage gaps` : ""}`, result.warnings.length ? "error" : "success");
+    await refreshAll();
+  } catch (e) {
+    toast(e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+});
+
+/* ---------- Month nav ---------- */
+document.getElementById("prevMonth").addEventListener("click", () => {
+  state.monthIndex = (state.monthIndex + 11) % 12;
+  refreshAll();
+});
+document.getElementById("nextMonth").addEventListener("click", () => {
+  state.monthIndex = (state.monthIndex + 1) % 12;
+  refreshAll();
+});
+document.getElementById("scrollToWarnings").addEventListener("click", () => {
+  document.getElementById("warningsCard").scrollIntoView({ behavior: "smooth", block: "center" });
+});
+
+/* ---------- Leave modal ---------- */
+const leaveOverlay = document.getElementById("leaveModalOverlay");
+document.getElementById("leaveBtn").addEventListener("click", () => {
+  const select = document.getElementById("leaveStaffSelect");
+  const staff = state.staff.filter(s => s.homeOutletId === state.activeOutletId);
+  select.innerHTML = staff.map(s => `<option value="${s.staffId}">${s.name} — ${ROLE_LABEL[s.role]}</option>`).join("");
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById("leaveStart").value = today;
+  document.getElementById("leaveEnd").value = today;
+  document.getElementById("leaveReason").value = "";
+  leaveOverlay.classList.add("open");
+});
+document.getElementById("closeLeaveModal").addEventListener("click", () => leaveOverlay.classList.remove("open"));
+document.getElementById("cancelLeave").addEventListener("click", () => leaveOverlay.classList.remove("open"));
+leaveOverlay.addEventListener("click", (e) => { if (e.target === leaveOverlay) leaveOverlay.classList.remove("open"); });
+
+document.getElementById("submitLeave").addEventListener("click", async () => {
+  const staffId = document.getElementById("leaveStaffSelect").value;
+  const startDate = document.getElementById("leaveStart").value;
+  const endDate = document.getElementById("leaveEnd").value;
+  const reason = document.getElementById("leaveReason").value;
+  if (!staffId || !startDate || !endDate) { toast("Fill in all required fields", "error"); return; }
+  try {
+    const request = await api("/roster/leave", { method: "POST", body: JSON.stringify({ staffId, startDate, endDate, reason }) });
+    await api(`/roster/leave/${request.leaveRequestId}/decision`, { method: "POST", body: JSON.stringify({ status: "approved" }) });
+    toast("Leave approved — affected shifts marked for coverage", "success");
+    leaveOverlay.classList.remove("open");
+    await refreshAll();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
+
+/* ---------- Swap modal ---------- */
+const swapOverlay = document.getElementById("swapModalOverlay");
+function openSwapModal(assignment) {
+  state.swapFrom = assignment;
+  const person = staffById(assignment.staffId);
+  const template = templateById(assignment.shiftTemplateId);
+  document.getElementById("swapFromDesc").textContent = `${person?.name ?? "?"} · ${ROLE_LABEL[assignment.role]} · ${template?.label} · ${assignment.date}`;
+
+  const candidates = state.assignments.filter(a =>
+    a.assignmentId !== assignment.assignmentId &&
+    a.role === assignment.role &&
+    a.staffId &&
+    a.staffId !== assignment.staffId
+  );
+
+  const select = document.getElementById("swapTargetSelect");
+  if (!candidates.length) {
+    select.innerHTML = `<option value="">No eligible same-role shifts this month</option>`;
+  } else {
+    select.innerHTML = candidates.map(a => {
+      const p = staffById(a.staffId);
+      const t = templateById(a.shiftTemplateId);
+      return `<option value="${a.assignmentId}">${a.date} · ${t?.label} · ${p?.name ?? "?"}</option>`;
+    }).join("");
+  }
+  swapOverlay.classList.add("open");
+}
+document.getElementById("closeSwapModal").addEventListener("click", () => swapOverlay.classList.remove("open"));
+document.getElementById("cancelSwap").addEventListener("click", () => swapOverlay.classList.remove("open"));
+swapOverlay.addEventListener("click", (e) => { if (e.target === swapOverlay) swapOverlay.classList.remove("open"); });
+
+document.getElementById("submitSwap").addEventListener("click", async () => {
+  const targetId = document.getElementById("swapTargetSelect").value;
+  if (!targetId || !state.swapFrom) { toast("Choose a shift to swap with", "error"); return; }
+  try {
+    await api("/roster/swap", { method: "POST", body: JSON.stringify({ assignmentIdA: state.swapFrom.assignmentId, assignmentIdB: targetId }) });
+    toast("Shift swapped", "success");
+    swapOverlay.classList.remove("open");
+    await refreshAll();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
+
+/* ---------- Boot ---------- */
+(async function boot() {
+  state.monthIndex = new Date().getMonth();
+  await loadStatic();
+  renderMonthLabel();
+  await refreshAll();
+})();
+</script>
+</body>
+</html>

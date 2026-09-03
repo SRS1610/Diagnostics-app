@@ -20,6 +20,7 @@ export function buildApp() {
 
   app.use(express.static(path.join(__dirname, "..", "public")));
 
+  app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "..", "public", "roster_dashboard.html")));
   app.get("/health", (_req, res) => res.json({ ok: true }));
   app.use("/outlets", outletsRoutes);
   app.use("/staff", staffRoutes);
