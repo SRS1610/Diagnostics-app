@@ -6,7 +6,8 @@
     "packages/shared",
     "packages/api",
     "packages/portal",
-    "packages/consumer"
+    "packages/consumer",
+    "packages/roster"
   ],
   "scripts": {
     "dev:api": "npm run dev --workspace=packages/api",
@@ -15,7 +16,9 @@
     "db:generate": "npm run db:generate --workspace=packages/api",
     "db:migrate": "npm run db:migrate --workspace=packages/api",
     "db:studio": "npm run db:studio --workspace=packages/api",
-    "dev:consumer": "npm run dev --workspace=packages/consumer"
+    "dev:consumer": "npm run dev --workspace=packages/consumer",
+    "dev:roster": "npm run dev --workspace=packages/roster",
+    "test:roster": "npm run test --workspace=packages/roster"
   },
   "devDependencies": {
     "typescript": "^5.5.4"
