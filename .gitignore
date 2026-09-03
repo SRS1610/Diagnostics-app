@@ -7,3 +7,4 @@ build/
 .DS_Store
 packages/api/prisma/dev.db
 .turbo/
+.netlify/

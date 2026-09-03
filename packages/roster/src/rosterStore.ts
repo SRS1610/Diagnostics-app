@@ -18,9 +18,15 @@ import {
   StaffMember,
 } from "./types";
 
-let nextAssignmentId = 1;
-let nextLeaveId = 1;
-let nextStaffId = 1;
+interface PersistedState {
+  staff: StaffMember[];
+  leave: LeaveRequest[];
+  assignments: ShiftAssignment[];
+  lastWarnings: RosterWarning[];
+  nextAssignmentId: number;
+  nextLeaveId: number;
+  nextStaffId: number;
+}
 
 class RosterStore {
   outlets: Outlet[] = OUTLETS;
@@ -29,6 +35,40 @@ class RosterStore {
   leave: LeaveRequest[] = [];
   assignments: ShiftAssignment[] = [];
   lastWarnings: RosterWarning[] = [];
+
+  // ID counters live on the instance (not module-level `let`s) so
+  // serialize()/hydrate() can carry them along with everything else —
+  // needed on Netlify, where each function invocation gets a fresh
+  // module instance and the real state round-trips through Blobs
+  // between requests (see netlify/functions/api.mts). The Express dev
+  // server never calls these; it just keeps one long-lived instance.
+  private nextAssignmentId = 1;
+  private nextLeaveId = 1;
+  private nextStaffId = 1;
+
+  /** Plain-object snapshot of everything that isn't static seed data, for a persistence layer (e.g. Netlify Blobs) to store. */
+  serialize(): PersistedState {
+    return {
+      staff: this.staff,
+      leave: this.leave,
+      assignments: this.assignments,
+      lastWarnings: this.lastWarnings,
+      nextAssignmentId: this.nextAssignmentId,
+      nextLeaveId: this.nextLeaveId,
+      nextStaffId: this.nextStaffId,
+    };
+  }
+
+  /** Restores a snapshot produced by serialize(). Outlets/shiftTemplates are always the static seed data, never persisted. */
+  hydrate(state: PersistedState): void {
+    this.staff = state.staff;
+    this.leave = state.leave;
+    this.assignments = state.assignments;
+    this.lastWarnings = state.lastWarnings;
+    this.nextAssignmentId = state.nextAssignmentId;
+    this.nextLeaveId = state.nextLeaveId;
+    this.nextStaffId = state.nextStaffId;
+  }
 
   listOutlets(): Outlet[] {
     return this.outlets;
@@ -43,7 +83,7 @@ class RosterStore {
   }
 
   addStaff(input: Omit<StaffMember, "staffId">): StaffMember {
-    const member: StaffMember = { ...input, staffId: `staff-${nextStaffId++}` };
+    const member: StaffMember = { ...input, staffId: `staff-${this.nextStaffId++}` };
     this.staff.push(member);
     return member;
   }
@@ -80,7 +120,7 @@ class RosterStore {
       shiftTemplates: this.shiftTemplates,
       leave: this.leave,
       year,
-      makeAssignmentId: () => `asg-${nextAssignmentId++}`,
+      makeAssignmentId: () => `asg-${this.nextAssignmentId++}`,
     });
 
     this.assignments.push(...assignments);
@@ -115,7 +155,7 @@ class RosterStore {
   requestLeave(input: Omit<LeaveRequest, "leaveRequestId" | "status">): LeaveRequest {
     const request: LeaveRequest = {
       ...input,
-      leaveRequestId: `leave-${nextLeaveId++}`,
+      leaveRequestId: `leave-${this.nextLeaveId++}`,
       status: "pending",
     };
     this.leave.push(request);

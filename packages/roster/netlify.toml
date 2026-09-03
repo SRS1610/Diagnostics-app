@@ -1,0 +1,15 @@
+# Netlify config for the standalone badminton-outlet roster module.
+# Separate site from the root netlify.toml (which builds packages/portal) —
+# this is an unrelated product living in the same monorepo, not a page of
+# the diagnostics portal.
+
+[build]
+  publish = "public"
+  command = "true"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
