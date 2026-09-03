@@ -95,32 +95,79 @@ function availableDays(patternIndex: number): number[] {
   return days;
 }
 
-// 12 staff per outlet, sized against the weekly demand implied by
-// shiftTemplatesForOutlet (7 duty-manager shifts/wk, 14 reception, 7
-// coach, 7 maintenance): enough combined weekly-hour capacity per role,
-// spread across full-time/part-time/casual so availableDays patterns
-// overlap into most weekdays, that the generator fills the large
-// majority of slots — a few understaffed gaps on top of that are
-// realistic and are exactly what the warnings panel is for, not a sign
-// the seed data is broken.
+// Which AVAILABILITY_PATTERNS indices to hand out within each role, chosen
+// so the union of the assigned patterns' present-days covers all 7 days —
+// i.e. every day of the week has at least one eligible person for that
+// role. This matters most for duty_manager, which has only 2 people: two
+// patterns whose absent-days overlap (e.g. both off Sunday) leaves that
+// role structurally uncoverable on that day for the entire year, not an
+// occasional gap — that's what originally produced a wall of "Unfilled
+// Duty Manager" on the same weekday every single week. Each list below was
+// checked by hand against AVAILABILITY_PATTERNS' absent-day sets; if you
+// change either, re-verify the union still spans Sun-Sat.
+const ROLE_PATTERN_INDICES: Partial<Record<StaffMember["role"], number[]>> = {
+  duty_manager: [0, 5], // absent {Sun,Sat} + absent {Thu,Fri} -> every day covered by one or the other
+  // P4 and P5 are the two patterns that include BOTH Saturday and Sunday
+  // (Wed-Sun and {Sun,Mon,Tue,Wed,Sat} respectively) — reception carries
+  // both of them so the weekend has more than one eligible person, not
+  // just bare 1-candidate coverage like duty_manager/maintenance settle
+  // for. See the capacity comment below for why this role needed it.
+  reception: [1, 2, 3, 4, 5],
+  coach: [0, 1, 4],
+  maintenance: [0, 2, 3],
+};
+
+// Hour caps are sized against the WORST-CASE weekly demand across all 6
+// outlets, not the average — shiftTemplatesForOutlet's mid-point split
+// means a 6:00-23:00 outlet gets a 9h morning shift (vs 8h at a
+// 7:00-22:00 outlet), so a role scheduled every morning needs 7*9=63h of
+// combined weekly capacity to have any chance of full coverage, not the
+// 56h a shorter-hours outlet would need.
+//
+// A first pass sized each role's combined cap to just barely clear its
+// worst-case weekly demand (e.g. maintenance at 64h vs 63h needed). That
+// was wrong: this scheduler fills the SCARCEST slot first (see
+// rosterGenerator.ts), so whichever day/role combination has the least
+// slack ends up structurally shorted almost every week, not just
+// occasionally — a 1h margin on a 63h demand is theoretically enough but
+// leaves no room for the greedy fill to actually realize it (a single
+// person's day off shifts everything). Every role below now carries at
+// least ~15-25% combined capacity above worst-case demand; treat that
+// margin, not the bare "cap >= demand" arithmetic, as the real
+// requirement. If you resize opening hours or requiredRoles, re-check
+// both the per-role demand AND this buffer.
 export function buildStaffForOutlet(outlet: Outlet, seedOffset: number): StaffMember[] {
   const roster: Array<{ role: StaffMember["role"]; employmentType: StaffMember["employmentType"]; maxHoursPerWeek: number }> = [
     { role: "duty_manager", employmentType: "full_time", maxHoursPerWeek: 38 },
-    { role: "duty_manager", employmentType: "part_time", maxHoursPerWeek: 24 },
+    { role: "duty_manager", employmentType: "part_time", maxHoursPerWeek: 28 }, // 66h vs 63h demand
     { role: "reception", employmentType: "full_time", maxHoursPerWeek: 38 },
     { role: "reception", employmentType: "full_time", maxHoursPerWeek: 38 },
-    { role: "reception", employmentType: "part_time", maxHoursPerWeek: 24 },
-    { role: "reception", employmentType: "casual", maxHoursPerWeek: 16 },
+    { role: "reception", employmentType: "part_time", maxHoursPerWeek: 28 },
+    { role: "reception", employmentType: "casual", maxHoursPerWeek: 24 },
+    { role: "reception", employmentType: "casual", maxHoursPerWeek: 20 }, // 5 people, 148h vs 119h demand — weekend-pattern people included
     { role: "coach", employmentType: "full_time", maxHoursPerWeek: 38 },
     { role: "coach", employmentType: "part_time", maxHoursPerWeek: 24 },
-    { role: "coach", employmentType: "casual", maxHoursPerWeek: 16 },
-    { role: "maintenance", employmentType: "part_time", maxHoursPerWeek: 24 },
-    { role: "maintenance", employmentType: "casual", maxHoursPerWeek: 16 },
-    { role: "maintenance", employmentType: "casual", maxHoursPerWeek: 12 },
+    { role: "coach", employmentType: "casual", maxHoursPerWeek: 16 }, // 78h vs 56h demand (evening-only) — ample
+    { role: "maintenance", employmentType: "part_time", maxHoursPerWeek: 32 },
+    { role: "maintenance", employmentType: "casual", maxHoursPerWeek: 24 },
+    { role: "maintenance", employmentType: "casual", maxHoursPerWeek: 20 }, // 76h vs 63h demand
   ];
+
+  const roleSeenCount: Partial<Record<StaffMember["role"], number>> = {};
 
   return roster.map((entry, i) => {
     const seed = seedOffset + i;
+    const positionInRole = roleSeenCount[entry.role] ?? 0;
+    roleSeenCount[entry.role] = positionInRole + 1;
+
+    const patternChoices = ROLE_PATTERN_INDICES[entry.role]!;
+    // Rotate which staff member gets which pattern per outlet (varies the
+    // demo data) without breaking the coverage guarantee — the *set* of
+    // patterns used for the role stays the same, only who gets which one
+    // changes, and the union-covers-all-7-days property only depends on
+    // the set, not the assignment order.
+    const patternIndex = patternChoices[(positionInRole + seedOffset) % patternChoices.length];
+
     return {
       staffId: `${outlet.outletId}-staff-${i + 1}`,
       name: name(seed),
@@ -128,7 +175,7 @@ export function buildStaffForOutlet(outlet: Outlet, seedOffset: number): StaffMe
       homeOutletId: outlet.outletId,
       employmentType: entry.employmentType,
       maxHoursPerWeek: entry.maxHoursPerWeek,
-      availableDays: availableDays(seed) as StaffMember["availableDays"],
+      availableDays: availableDays(patternIndex) as StaffMember["availableDays"],
     };
   });
 }

@@ -20,6 +20,7 @@ import {
 
 let nextAssignmentId = 1;
 let nextLeaveId = 1;
+let nextStaffId = 1;
 
 class RosterStore {
   outlets: Outlet[] = OUTLETS;
@@ -39,6 +40,32 @@ class RosterStore {
 
   listShiftTemplates(outletId?: string): ShiftTemplate[] {
     return outletId ? this.shiftTemplates.filter((t) => t.outletId === outletId) : this.shiftTemplates;
+  }
+
+  addStaff(input: Omit<StaffMember, "staffId">): StaffMember {
+    const member: StaffMember = { ...input, staffId: `staff-${nextStaffId++}` };
+    this.staff.push(member);
+    return member;
+  }
+
+  /**
+   * Removing a staff member unassigns them from every future-facing
+   * shift rather than deleting those assignment rows outright — the
+   * gap needs to show up as understaffed (same as an approved-leave
+   * gap) so it isn't silently lost from the roster.
+   */
+  removeStaff(staffId: string): { ok: true } | { ok: false; error: string } {
+    const index = this.staff.findIndex((s) => s.staffId === staffId);
+    if (index === -1) return { ok: false, error: "Staff member not found" };
+    this.staff.splice(index, 1);
+
+    for (const assignment of this.assignments) {
+      if (assignment.staffId === staffId) {
+        assignment.staffId = null;
+        assignment.status = "understaffed";
+      }
+    }
+    return { ok: true };
   }
 
   generateYear(year: number): GenerateRosterResult {
@@ -62,12 +89,22 @@ class RosterStore {
     return { assignmentsCreated: assignments.length, warnings };
   }
 
-  listAssignments(filter: { outletId?: string; month?: string; staffId?: string }): ShiftAssignment[] {
+  listAssignments(filter: { outletId?: string; month?: string; year?: string; staffId?: string }): ShiftAssignment[] {
     return this.assignments.filter((a) => {
       if (filter.outletId && a.outletId !== filter.outletId) return false;
       if (filter.month && !a.date.startsWith(filter.month)) return false;
+      if (filter.year && !a.date.startsWith(filter.year)) return false;
       if (filter.staffId && a.staffId !== filter.staffId) return false;
       return true;
+    });
+  }
+
+  /** One row per outlet: shift counts for the given month, for the cross-outlet overview. */
+  summarizeOutlets(month: string): Array<{ outletId: string; total: number; filled: number; gaps: number }> {
+    return this.outlets.map((outlet) => {
+      const monthAssignments = this.assignments.filter((a) => a.outletId === outlet.outletId && a.date.startsWith(month));
+      const filled = monthAssignments.filter((a) => a.staffId).length;
+      return { outletId: outlet.outletId, total: monthAssignments.length, filled, gaps: monthAssignments.length - filled };
     });
   }
 

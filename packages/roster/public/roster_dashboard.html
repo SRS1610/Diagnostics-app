@@ -190,6 +190,14 @@
         <div class="sub" id="outletSub">&nbsp;</div>
       </div>
       <div class="topbar-actions">
+        <button class="btn" id="overviewBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          All outlets
+        </button>
+        <button class="btn" id="exportBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          Export CSV
+        </button>
         <button class="btn" id="leaveBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
           Request leave
@@ -237,11 +245,17 @@
       <div class="card">
         <div class="card-head">
           <h3>Staff at this outlet</h3>
-          <span class="sub" id="staffCount" style="font-size:11px;color:var(--text-faint);"></span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="sub" id="staffCount" style="font-size:11px;color:var(--text-faint);"></span>
+            <button class="btn btn-ghost" id="addStaffBtn" style="padding:5px 10px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              Add staff
+            </button>
+          </div>
         </div>
         <div class="card-body">
           <table>
-            <thead><tr><th>Staff</th><th>Role</th><th>Employment</th><th>Weekly cap</th></tr></thead>
+            <thead><tr><th>Staff</th><th>Role</th><th>Employment</th><th>Weekly cap</th><th></th></tr></thead>
             <tbody id="staffTableBody"></tbody>
           </table>
         </div>
@@ -303,6 +317,61 @@
       <button class="btn" id="cancelSwap">Cancel</button>
       <button class="btn btn-primary" id="submitSwap">Swap</button>
     </div>
+  </div>
+</div>
+
+<!-- Add staff modal -->
+<div class="modal-overlay" id="addStaffModalOverlay">
+  <div class="modal" style="position:relative;">
+    <button class="btn btn-ghost modal-close" id="closeAddStaffModal" style="padding:4px 8px;">✕</button>
+    <h2>Add staff member</h2>
+    <div class="modal-sub" id="addStaffSub"></div>
+    <div class="field">
+      <label>Full name</label>
+      <input type="text" id="newStaffName" placeholder="e.g. Priya Patel">
+    </div>
+    <div class="field">
+      <label>Role</label>
+      <select id="newStaffRole">
+        <option value="duty_manager">Duty Manager</option>
+        <option value="reception">Reception</option>
+        <option value="coach">Coach</option>
+        <option value="maintenance">Maintenance</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Employment type</label>
+      <select id="newStaffEmployment">
+        <option value="full_time">Full-time</option>
+        <option value="part_time">Part-time</option>
+        <option value="casual">Casual</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Max hours / week</label>
+      <input type="number" id="newStaffMaxHours" value="24" min="1" max="80">
+    </div>
+    <div class="field">
+      <label>Available days</label>
+      <div id="newStaffDays" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelAddStaff">Cancel</button>
+      <button class="btn btn-primary" id="submitAddStaff">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Overview modal -->
+<div class="modal-overlay" id="overviewModalOverlay">
+  <div class="modal" style="width: 560px; position:relative;">
+    <button class="btn btn-ghost modal-close" id="closeOverviewModal" style="padding:4px 8px;">✕</button>
+    <h2>All outlets — <span id="overviewMonthLabel"></span></h2>
+    <div class="modal-sub">Shift coverage across all 6 Melbourne outlets for the currently selected month.</div>
+    <table>
+      <thead><tr><th>Outlet</th><th>Shifts</th><th>Filled</th><th>Gaps</th></tr></thead>
+      <tbody id="overviewTableBody"></tbody>
+    </table>
   </div>
 </div>
 
@@ -550,8 +619,24 @@ function renderStaffTable() {
       <td><span class="role-badge"><span style="width:6px;height:6px;border-radius:50%;background:${ROLE_COLOR[s.role]};display:inline-block;"></span>${ROLE_LABEL[s.role]}</span></td>
       <td class="staff-role" style="text-transform:capitalize;">${s.employmentType.replace("_"," ")}</td>
       <td>${s.maxHoursPerWeek}h/wk</td>
+      <td style="text-align:right;"><button class="btn btn-ghost remove-staff-btn" data-staff-id="${s.staffId}" style="padding:4px 8px; color:var(--fail);">Remove</button></td>
     </tr>
-  `).join("") || `<tr><td colspan="4"><div class="empty-state">No staff assigned to this outlet.</div></td></tr>`;
+  `).join("") || `<tr><td colspan="5"><div class="empty-state">No staff assigned to this outlet.</div></td></tr>`;
+
+  for (const btn of document.querySelectorAll(".remove-staff-btn")) {
+    btn.addEventListener("click", async () => {
+      const person = staffById(btn.dataset.staffId);
+      if (!confirm(`Remove ${person?.name ?? "this staff member"}? Their future shifts will need coverage.`)) return;
+      try {
+        await api(`/staff/${btn.dataset.staffId}`, { method: "DELETE" });
+        state.staff = state.staff.filter(s => s.staffId !== btn.dataset.staffId);
+        toast(`${person?.name ?? "Staff member"} removed`, "success");
+        await refreshAll();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    });
+  }
 }
 
 function renderWarnings() {
@@ -683,6 +768,92 @@ document.getElementById("submitSwap").addEventListener("click", async () => {
     toast(e.message, "error");
   }
 });
+
+/* ---------- Add staff modal ---------- */
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const addStaffOverlay = document.getElementById("addStaffModalOverlay");
+
+document.getElementById("addStaffBtn").addEventListener("click", () => {
+  document.getElementById("addStaffSub").textContent = `Adding to ${activeOutlet()?.name ?? "this outlet"}.`;
+  document.getElementById("newStaffName").value = "";
+  document.getElementById("newStaffRole").value = "reception";
+  document.getElementById("newStaffEmployment").value = "part_time";
+  document.getElementById("newStaffMaxHours").value = "24";
+  const daysEl = document.getElementById("newStaffDays");
+  daysEl.innerHTML = DAY_LABELS.map((label, day) => `
+    <label style="display:flex; align-items:center; gap:4px; font-size:11.5px; font-weight:500; background:var(--panel-soft); border:1px solid var(--line); border-radius:8px; padding:5px 8px; cursor:pointer;">
+      <input type="checkbox" class="new-staff-day" value="${day}" ${day >= 1 && day <= 5 ? "checked" : ""} style="width:auto;">${label}
+    </label>
+  `).join("");
+  addStaffOverlay.classList.add("open");
+});
+document.getElementById("closeAddStaffModal").addEventListener("click", () => addStaffOverlay.classList.remove("open"));
+document.getElementById("cancelAddStaff").addEventListener("click", () => addStaffOverlay.classList.remove("open"));
+addStaffOverlay.addEventListener("click", (e) => { if (e.target === addStaffOverlay) addStaffOverlay.classList.remove("open"); });
+
+document.getElementById("submitAddStaff").addEventListener("click", async () => {
+  const name = document.getElementById("newStaffName").value.trim();
+  const role = document.getElementById("newStaffRole").value;
+  const employmentType = document.getElementById("newStaffEmployment").value;
+  const maxHoursPerWeek = Number(document.getElementById("newStaffMaxHours").value);
+  const availableDays = Array.from(document.querySelectorAll(".new-staff-day:checked")).map(el => Number(el.value));
+
+  if (!name) { toast("Enter a name", "error"); return; }
+  if (!availableDays.length) { toast("Pick at least one available day", "error"); return; }
+
+  try {
+    const created = await api("/staff", {
+      method: "POST",
+      body: JSON.stringify({ name, role, employmentType, maxHoursPerWeek, availableDays, homeOutletId: state.activeOutletId }),
+    });
+    state.staff.push(created);
+    toast(`${created.name} added — regenerate the year to schedule them`, "success");
+    addStaffOverlay.classList.remove("open");
+    renderStaffTable();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
+
+/* ---------- Export CSV ---------- */
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const outlet = activeOutlet();
+  if (!outlet) return;
+  const a = document.createElement("a");
+  a.href = `/roster/export?outletId=${outlet.outletId}&month=${monthKey()}`;
+  a.download = `roster-${outlet.outletId}-${monthKey()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
+/* ---------- Overview modal ---------- */
+const overviewOverlay = document.getElementById("overviewModalOverlay");
+document.getElementById("overviewBtn").addEventListener("click", async () => {
+  document.getElementById("overviewMonthLabel").textContent = document.getElementById("monthLabel").textContent;
+  const body = document.getElementById("overviewTableBody");
+  body.innerHTML = `<tr><td colspan="4"><div class="empty-state">Loading…</div></td></tr>`;
+  overviewOverlay.classList.add("open");
+  try {
+    const rows = await api(`/roster/overview?month=${monthKey()}`);
+    body.innerHTML = rows.map(r => {
+      const outlet = state.outlets.find(o => o.outletId === r.outletId);
+      return `
+        <tr>
+          <td>${outlet?.name ?? r.outletId}</td>
+          <td>${r.total}</td>
+          <td>${r.filled}</td>
+          <td style="color:${r.gaps > 0 ? "var(--fail)" : "var(--text-faint)"}; font-weight:${r.gaps > 0 ? "700" : "400"};">${r.gaps}</td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="4"><div class="empty-state">No shifts generated for this month yet.</div></td></tr>`;
+  } catch (e) {
+    toast(e.message, "error");
+    overviewOverlay.classList.remove("open");
+  }
+});
+document.getElementById("closeOverviewModal").addEventListener("click", () => overviewOverlay.classList.remove("open"));
+overviewOverlay.addEventListener("click", (e) => { if (e.target === overviewOverlay) overviewOverlay.classList.remove("open"); });
 
 /* ---------- Boot ---------- */
 (async function boot() {

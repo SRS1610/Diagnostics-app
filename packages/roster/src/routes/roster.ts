@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { assignmentsToCsv } from "../csvExport";
 import { rosterStore } from "../rosterStore";
 
 const router = Router();
@@ -15,8 +16,33 @@ router.post("/generate", (req, res) => {
 router.get("/assignments", (req, res) => {
   const outletId = typeof req.query.outletId === "string" ? req.query.outletId : undefined;
   const month = typeof req.query.month === "string" ? req.query.month : undefined;
+  const year = typeof req.query.year === "string" ? req.query.year : undefined;
   const staffId = typeof req.query.staffId === "string" ? req.query.staffId : undefined;
-  res.json(rosterStore.listAssignments({ outletId, month, staffId }));
+  res.json(rosterStore.listAssignments({ outletId, month, year, staffId }));
+});
+
+router.get("/overview", (req, res) => {
+  const month = typeof req.query.month === "string" ? req.query.month : undefined;
+  if (!month) return res.status(400).json({ error: "month (YYYY-MM) is required" });
+  res.json(rosterStore.summarizeOutlets(month));
+});
+
+router.get("/export", (req, res) => {
+  const outletId = typeof req.query.outletId === "string" ? req.query.outletId : undefined;
+  const month = typeof req.query.month === "string" ? req.query.month : undefined;
+  if (!outletId || !month) return res.status(400).json({ error: "outletId and month are required" });
+
+  const assignments = rosterStore.listAssignments({ outletId, month });
+  const csv = assignmentsToCsv({
+    assignments,
+    staff: rosterStore.listStaff(),
+    shiftTemplates: rosterStore.listShiftTemplates(),
+    outlets: rosterStore.listOutlets(),
+  });
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="roster-${outletId}-${month}.csv"`);
+  res.send(csv);
 });
 
 router.get("/warnings", (req, res) => {
