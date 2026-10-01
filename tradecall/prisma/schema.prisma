@@ -1,0 +1,247 @@
+// TradeCall data model.
+//
+// Business is the tenant. Every other row carries businessId; dashboard
+// queries scope by the signed-in owner's businessId, and provider webhooks
+// resolve the business from the phone number that was called or texted.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CallMode {
+  RING_OWNER // callers dial our number; we ring the owner, then fall back
+  FORWARDED // owner's carrier forwards unanswered calls to our number
+}
+
+// Where a live call is in its lifecycle. Every transition is a conditional
+// update (WHERE state IN ...), so two webhooks racing can't both act.
+enum CallState {
+  RINGING_OWNER // owner's phone is ringing, caller hears ringback
+  SCREENING // owner picked up and is hearing "press 1 to accept"
+  CONNECTING // owner pressed 1; answering the caller to bridge
+  CONNECTED // caller and owner are talking
+  VOICEMAIL // missed; caller is hearing the greeting / leaving a message
+  SELF_TEST // the owner called their own number to check it works
+  ENDED
+}
+
+enum CallOutcome {
+  PENDING
+  ANSWERED
+  MISSED
+}
+
+enum MissReason {
+  NO_ANSWER // owner didn't pick up / was busy
+  NOT_ACCEPTED // owner leg answered but nobody pressed 1 (usually their voicemail)
+  CALLER_HUNG_UP // caller gave up while it was still ringing
+  FORWARDED // arrived via carrier forwarding: already missed
+}
+
+enum LeadStage {
+  NEW // texted back, no reply yet
+  ENGAGED // replied
+  QUALIFIED // answered the intake questions
+  SCHEDULED // appointment booked
+  WON
+  LOST
+}
+
+enum Direction {
+  IN
+  OUT
+}
+
+enum MessageKind {
+  AUTO_REPLY // the instant missed-call text
+  INTAKE // intake questions / acknowledgements
+  NUDGE // one follow-up if they go quiet
+  REMINDER // appointment reminder
+  OWNER // typed by the owner (dashboard or SMS relay)
+  CUSTOMER // inbound from the customer
+}
+
+enum JobType {
+  NUDGE
+  REMINDER
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  CANCELED
+  FAILED
+}
+
+model Business {
+  id           String  @id @default(cuid())
+  name         String
+  ownerName    String
+  email        String  @unique
+  passwordHash String
+  ownerPhone   String // E.164 — rings first, receives alerts, can reply by SMS
+  phoneNumber  String? @unique // the provider number customers call/text
+  timezone     String  @default("America/New_York")
+
+  callMode         CallMode @default(RING_OWNER)
+  ringSeconds      Int      @default(18)
+  screenCalls      Boolean  @default(true)
+  voicemailEnabled Boolean  @default(true)
+  hours            Json // {"mon":{"open":"07:00","close":"18:00"},"sun":null,...}
+
+  missedText     String
+  afterHoursText String
+  intakeEnabled  Boolean @default(true)
+  nudgeEnabled   Boolean @default(true)
+  nudgeAfterMin  Int     @default(120)
+  dedupeMin      Int     @default(60)
+  avgJobCents    Int     @default(45000)
+
+  digestEnabled Boolean   @default(true)
+  digestSentAt  DateTime?
+
+  // Short per-business lead numbers (#12) so the owner can reply by SMS.
+  leadSeq         Int     @default(0)
+  // The lead the owner was most recently alerted about — a bare SMS reply
+  // from the owner goes to this lead.
+  lastAlertLeadId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calls      Call[]
+  leads      Lead[]
+  messages   Message[]
+  optOuts    OptOut[]
+  jobs       Job[]
+  voicemails Voicemail[]
+}
+
+model Call {
+  id          String      @id @default(cuid())
+  businessId  String
+  business    Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  callerLegId String      @unique // provider id of the customer's leg
+  ownerLegId  String?     @unique // provider id of the leg we dial to the owner
+  sessionId   String?
+  fromNumber  String
+  state       CallState   @default(RINGING_OWNER)
+  outcome     CallOutcome @default(PENDING)
+  missReason  MissReason?
+  afterHours  Boolean     @default(false)
+  // The customer's leg has been answered by us (needed to know whether to
+  // play the voicemail greeting now or after answering).
+  callerAnswered Boolean  @default(false)
+  startedAt   DateTime
+  answeredAt  DateTime?
+  endedAt     DateTime?
+  leadId      String?
+  lead        Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  voicemail   Voicemail?
+
+  @@index([businessId, startedAt])
+  @@index([sessionId])
+}
+
+// Provider recording links expire (Telnyx: 10 minutes), so the audio is
+// downloaded and kept here.
+model Voicemail {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  callId     String   @unique
+  call       Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  audio      Bytes
+  mimeType   String
+  createdAt  DateTime @default(now())
+}
+
+model Lead {
+  id             String    @id @default(cuid())
+  businessId     String
+  business       Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  code           Int
+  phone          String
+  name           String?
+  job            String?
+  address        String?
+  urgent         Boolean   @default(false)
+  stage          LeadStage @default(NEW)
+  // 0 = not in intake; 1 awaiting job; 2 awaiting address; 3 awaiting emergency y/n
+  intakeStep     Int       @default(0)
+  valueCents     Int?
+  appointmentAt  DateTime?
+  wonAt          DateTime?
+  notes          String?
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  calls    Call[]
+  messages Message[]
+  jobs     Job[]
+
+  @@unique([businessId, code])
+  // Not unique per phone: a repeat caller whose last job is closed (WON/LOST)
+  // starts a new lead, so per-period stats stay honest.
+  @@index([businessId, phone])
+  @@index([businessId, stage])
+}
+
+model Message {
+  id         String      @id @default(cuid())
+  businessId String
+  business   Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId     String
+  lead       Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction  Direction
+  kind       MessageKind
+  body       String
+  providerId String?     @unique
+  status     String // queued | sent | delivered | failed | received
+  error      String?
+  createdAt  DateTime    @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([leadId, createdAt])
+}
+
+// STOP applies to the number, across every lead for it.
+model OptOut {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  phone      String
+  createdAt  DateTime @default(now())
+
+  @@unique([businessId, phone])
+}
+
+model Job {
+  id         String    @id @default(cuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId     String
+  lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type       JobType
+  runAt      DateTime
+  status     JobStatus @default(PENDING)
+  attempts   Int       @default(0)
+  lastError  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([status, runAt])
+}
+
+// Providers retry webhooks; each event id is processed once.
+model WebhookEvent {
+  id         String   @id
+  receivedAt DateTime @default(now())
+}
