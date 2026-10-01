@@ -1,0 +1,214 @@
+// Missed-call text-back — data model.
+//
+// One Business = one paying customer (a plumber, an HVAC shop). Every
+// other table carries businessId, and every portal query filters by the
+// businessId in the signed-in owner's token. Twilio webhooks don't have a
+// token, so they resolve the business from the Twilio number that was
+// called or texted (Business.twilioNumber, unique).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CallMode {
+  // Calls to the business's Twilio number ring the owner's cell first;
+  // the text-back fires only if nobody accepts the call.
+  DIAL
+  // The owner keeps their existing number and sets up carrier "forward on
+  // no answer" to the Twilio number. Any call that arrives was already
+  // missed.
+  CARRIER_FORWARD
+}
+
+enum CallOutcome {
+  RINGING
+  ANSWERED
+  MISSED
+}
+
+enum LeadStatus {
+  NEW // texted back, no reply yet
+  CONTACTED // the caller replied
+  QUALIFIED // answered the intake questions
+  BOOKED // appointment set
+  WON // job done / sold
+  LOST
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageKind {
+  TEXT_BACK
+  QUALIFY
+  FOLLOW_UP
+  REMINDER
+  MANUAL
+  INBOUND
+}
+
+enum JobType {
+  FOLLOW_UP
+  APPOINTMENT_REMINDER
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  CANCELED
+  FAILED
+}
+
+model Business {
+  id           String   @id @default(cuid())
+  name         String
+  ownerName    String
+  ownerEmail   String   @unique
+  passwordHash String
+  // Where owner alerts go, and which phone rings in DIAL mode. E.164.
+  ownerPhone   String
+  // The Twilio number customers call/text. E.164. Null until provisioned.
+  twilioNumber String?  @unique
+  timezone     String   @default("America/New_York")
+
+  callMode       CallMode @default(DIAL)
+  ringTimeoutSec Int      @default(18)
+  // DIAL mode: the owner hears "press 1 to accept". Without this, the
+  // owner's own carrier voicemail "answers" the call and it never counts
+  // as missed.
+  screenCalls    Boolean  @default(true)
+  recordVoicemail Boolean @default(true)
+
+  // {"mon":{"open":"07:00","close":"18:00"}, "sun": null, ...}
+  businessHours Json
+
+  textBackMessage   String
+  afterHoursMessage String
+
+  qualifyEnabled   Boolean @default(true)
+  followUpEnabled  Boolean @default(true)
+  followUpDelayMin Int     @default(120)
+  // Don't text the same caller back twice within this window.
+  dedupeWindowMin  Int     @default(60)
+
+  // Used for the "estimated revenue at stake" figure on the dashboard. Cents.
+  avgJobValueCents Int @default(45000)
+
+  weeklyDigestEnabled Boolean   @default(true)
+  lastDigestSentAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calls    Call[]
+  leads    Lead[]
+  messages Message[]
+  jobs     ScheduledJob[]
+  optOuts  OptOut[]
+}
+
+model Call {
+  id             String      @id @default(cuid())
+  businessId     String
+  business       Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  callSid        String      @unique
+  fromNumber     String
+  outcome        CallOutcome @default(RINGING)
+  afterHours     Boolean     @default(false)
+  // Set when the owner pressed 1 on the screening prompt.
+  screenAccepted Boolean     @default(false)
+  durationSec    Int?
+  voicemailUrl   String?
+  leadId         String?
+  lead           Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+
+  @@index([businessId, createdAt])
+}
+
+model Lead {
+  id             String     @id @default(cuid())
+  businessId     String
+  business       Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  phone          String
+  name           String?
+  jobDescription String?
+  address        String?
+  urgent         Boolean    @default(false)
+  status         LeadStatus @default(NEW)
+  // 0 = not in intake; 1 = waiting for "what do you need"; 2 = waiting for
+  // address; 3 = waiting for emergency yes/no.
+  qualifyStep    Int        @default(0)
+  jobValueCents  Int?
+  appointmentAt  DateTime?
+  wonAt          DateTime?
+  notes          String?
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  calls    Call[]
+  messages Message[]
+  jobs     ScheduledJob[]
+
+  // Not unique: a repeat caller whose last job is WON/LOST is a new
+  // opportunity and gets a new Lead, so per-lead stats stay honest.
+  @@index([businessId, phone])
+  @@index([businessId, status])
+}
+
+model Message {
+  id         String           @id @default(cuid())
+  businessId String
+  business   Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId     String
+  lead       Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction  MessageDirection
+  kind       MessageKind
+  body       String
+  twilioSid  String?          @unique
+  // queued / sent / delivered / failed / undelivered / received
+  status     String
+  error      String?
+  createdAt  DateTime         @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([leadId, createdAt])
+}
+
+model ScheduledJob {
+  id         String    @id @default(cuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId     String?
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type       JobType
+  runAt      DateTime
+  status     JobStatus @default(PENDING)
+  attempts   Int       @default(0)
+  lastError  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([status, runAt])
+}
+
+// STOP applies to the phone number, not one lead — a caller who opted out
+// must never be texted again by this business, whichever lead they're on.
+model OptOut {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  phone      String
+  createdAt  DateTime @default(now())
+
+  @@unique([businessId, phone])
+}

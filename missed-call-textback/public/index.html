@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Missed Call Textback</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar" id="topbar" hidden>
+    <div class="brand"><span class="logo" aria-hidden="true">↩</span> <span id="biz-name">Textback</span></div>
+    <nav>
+      <a href="#/dashboard" data-nav="dashboard">Dashboard</a>
+      <a href="#/leads" data-nav="leads">Leads</a>
+      <a href="#/settings" data-nav="settings">Settings</a>
+      <button class="link" id="logout">Sign out</button>
+    </nav>
+  </header>
+  <div class="banner" id="setup-banner" hidden></div>
+  <main id="view" aria-live="polite"></main>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>
