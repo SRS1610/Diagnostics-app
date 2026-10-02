@@ -134,3 +134,59 @@ describe("support view (view-as)", () => {
     expect(h.fake.smsTo(OWNER).every((m) => !m.text.includes("hi"))).toBe(true);
   });
 });
+
+describe("creating and managing businesses from the console", () => {
+  const tokenFrom = (link: string) => link.split("#/invite/")[1];
+
+  it("creates a business and invites its owner, who then sets their own password", async () => {
+    const p = await admin();
+    const res = await h
+      .as(p)
+      .post("/platform/tenants", { businessName: "Peak Roofing", ownerName: "Ray", ownerEmail: "Ray@PeakRoofing.com", ownerPhone: "(555) 010-6000", timezone: "America/Denver", plan: "PRO" })
+      .expect(201);
+    expect(res.body.tenant).toMatchObject({ name: "Peak Roofing", email: "ray@peakroofing.com", ownerPhone: "+15550106000", plan: "PRO", status: "ACTIVE", timezone: "America/Denver" });
+    expect(res.body.emailed).toBe(true);
+    expect(h.mailer.sent[0]).toMatchObject({ to: "ray@peakroofing.com", subject: "Your TradeCall account for Peak Roofing is ready" });
+    expect(await db.user.count({ where: { businessId: res.body.tenant.id } })).toBe(0); // no password chosen by staff
+
+    const accepted = await (await import("supertest")).default(h.app)
+      .post(`/api/auth/invite/${tokenFrom(res.body.link)}/accept`)
+      .send({ name: "Ray", password: "ray-password", phone: "555-010-6000" })
+      .expect(201);
+    const me = (await h.as(accepted.body.token).get("/me").expect(200)).body;
+    expect(me).toMatchObject({ role: "OWNER", business: { name: "Peak Roofing" } });
+
+    const actions = (await h.as(accepted.body.token).get("/activity")).body.entries.map((e: { action: string; actorKind: string }) => `${e.action}:${e.actorKind}`);
+    expect(actions).toEqual(expect.arrayContaining(["tenant_created:PLATFORM", "invite_sent:PLATFORM", "invite_accepted:USER"]));
+    expect((await h.as(p).get("/platform/tenants")).body.tenants.map((t: { name: string }) => t.name)).toContain("Peak Roofing");
+  });
+
+  it("validates input and refuses an email that already has an account", async () => {
+    const b = await business();
+    const p = await admin();
+    const owner = await db.user.findFirstOrThrow({ where: { businessId: b.id } });
+    await h.as(p).post("/platform/tenants", { businessName: "X", ownerName: "Y", ownerEmail: "not-an-email", ownerPhone: "5550106000" }).expect(400);
+    await h.as(p).post("/platform/tenants", { businessName: "Dup Co", ownerName: "Y", ownerEmail: owner.email, ownerPhone: "5550106000" }).expect(409);
+    await h.api(b).post("/platform/tenants", { businessName: "Sneaky", ownerName: "Y", ownerEmail: "s@example.com", ownerPhone: "5550106000" }).expect(403);
+  });
+
+  it("re-invites a lost owner, lists and cancels pending invites, and edits the business's details", async () => {
+    const p = await admin();
+    const { tenant } = (await h.as(p).post("/platform/tenants", { businessName: "Peak Roofing", ownerName: "Ray", ownerEmail: "ray@example.com", ownerPhone: "5550106000" })).body;
+    const again = (await h.as(p).post(`/platform/tenants/${tenant.id}/invites`, { email: "ray@example.com", role: "OWNER" }).expect(201)).body;
+    const detail = (await h.as(p).get(`/platform/tenants/${tenant.id}`)).body;
+    expect(detail.invites).toHaveLength(1); // the re-invite replaced the first link
+    await h.as(p).del(`/platform/tenants/${tenant.id}/invites/${again.invite.id}`).expect(200);
+    expect((await h.as(p).get(`/platform/tenants/${tenant.id}`)).body.invites).toHaveLength(0);
+
+    await h.as(p).patch(`/platform/tenants/${tenant.id}`, { name: "Peak Roofing & Gutters", email: "billing@peak.example" }).expect(200);
+    expect(await db.business.findUniqueOrThrow({ where: { id: tenant.id } })).toMatchObject({ name: "Peak Roofing & Gutters", email: "billing@peak.example" });
+  });
+
+  it("respects the plan's seats when staff invite people", async () => {
+    const p = await admin();
+    const { tenant } = (await h.as(p).post("/platform/tenants", { businessName: "Tiny Co", ownerName: "T", ownerEmail: "t@example.com", ownerPhone: "5550106000", plan: "STARTER" })).body;
+    await h.as(p).post(`/platform/tenants/${tenant.id}/invites`, { email: "second@example.com", role: "MEMBER" }).expect(201);
+    await h.as(p).post(`/platform/tenants/${tenant.id}/invites`, { email: "third@example.com", role: "MEMBER" }).expect(409);
+  });
+});

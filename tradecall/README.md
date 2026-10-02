@@ -63,6 +63,8 @@ npm run platform:admin -- you@yourcompany.com "Your Name"   # prints a one-time 
 Signing in as a platform admin opens a separate, indigo-themed console (so it's never confused with a customer's view):
 
 - **Businesses:** every tenant with plan, status, seats, texts this month, missed calls and last activity, plus platform-wide totals.
+- **New business:** create an account for a customer (name, plan, owner, timezone). The owner gets an invite to set their own password, so staff never choose or see it. Businesses can also still sign up themselves.
+- **Users and invites per business:** see who's joined, invite or re-invite someone (e.g. an owner who lost their link), and cancel pending invites. Edit the business name and contact email.
 - **Suspend / reactivate**, with a reason that's shown to the business:
   - While suspended, their calls aren't answered and no texts go out.
   - They can sign in and look, but can't change anything.
@@ -127,7 +129,7 @@ curl -X POST $W -H "$H" -d '{"eventId":"3","type":"sms.received","providerId":"m
 
 ```bash
 npm run test:setup   # migrate the test DB (TEST_DATABASE_URL, default tradecall_test)
-npm test             # 94 tests against real Postgres
+npm test             # 98 tests against real Postgres
 npm run typecheck
 ```
 

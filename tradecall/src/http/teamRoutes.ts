@@ -14,12 +14,11 @@ import { db } from "../lib/db";
 import { PLANS } from "../lib/plans";
 import { audit } from "../core/audit";
 import type { Deps } from "../core/deps";
+import { createInvite, SeatsFullError } from "../core/invites";
 import { seatUsage } from "../core/team";
 import { allow } from "./guards";
 import { HttpError, email, password, personName, phone } from "./common";
-import { hashToken, newInviteToken } from "./authRoutes";
 
-const INVITE_DAYS = 7;
 const TEAM_ROLES = ["OWNER", "ADMIN", "MEMBER"] as const;
 const userFields = { id: true, name: true, email: true, role: true, phone: true, getsAlerts: true, active: true, lastLoginAt: true, createdAt: true } as const;
 
@@ -54,36 +53,14 @@ export function teamRoutes(deps: Deps): Router {
     // admin probe which emails use TradeCall. Accepting the invite enforces it.
 
     const b = await db.business.findUniqueOrThrow({ where: { id: businessId } });
-    // Re-inviting the same email replaces the old link instead of using another seat.
-    await db.invite.updateMany({ where: { businessId, email: body.email, acceptedAt: null, revokedAt: null }, data: { revokedAt: deps.now() } });
-    const { used } = await seatUsage(businessId, deps.now());
-    if (used >= PLANS[b.plan].seats) {
-      throw new HttpError(409, `Your ${PLANS[b.plan].label} plan includes ${PLANS[b.plan].seats} seats and they're all in use. Remove someone or upgrade.`);
+    try {
+      const { invite, link, emailed } = await createInvite(deps, b, body.email, body.role, s);
+      // The link goes back to the inviter too, so they can text it if email isn't set up.
+      res.status(201).json({ invite, link, emailed });
+    } catch (err) {
+      if (err instanceof SeatsFullError) throw new HttpError(409, err.message);
+      throw err;
     }
-
-    const token = newInviteToken();
-    const invite = await db.invite.create({
-      data: { businessId, email: body.email, role: body.role, tokenHash: hashToken(token), expiresAt: new Date(deps.now().getTime() + INVITE_DAYS * 86_400_000), invitedById: s.userId },
-      select: { id: true, email: true, role: true, expiresAt: true, createdAt: true },
-    });
-    const link = `${config.publicUrl}/#/invite/${token}`;
-    let emailed = false;
-    if (deps.mailer) {
-      try {
-        await deps.mailer.send({
-          to: body.email,
-          subject: `${s.name} invited you to ${b.name} on TradeCall`,
-          text: `${s.name} added you to ${b.name}'s TradeCall team. Set up your login here (link expires in ${INVITE_DAYS} days):\n${link}`,
-          html: `<p>${s.name.replace(/</g, "&lt;")} added you to <b>${b.name.replace(/</g, "&lt;")}</b>'s TradeCall team.</p><p><a href="${link}">Set up your login</a> — the link expires in ${INVITE_DAYS} days.</p>`,
-        });
-        emailed = true;
-      } catch (err) {
-        console.error("[invite] email failed:", err instanceof Error ? err.message : err);
-      }
-    }
-    await audit(s, businessId, "invite_sent", body.email, { role: body.role });
-    // The link goes back to the inviter too, so they can text it if email isn't set up.
-    res.status(201).json({ invite, link, emailed });
   });
 
   r.delete("/team/invites/:id", allow("OWNER", "ADMIN"), async (req, res) => {

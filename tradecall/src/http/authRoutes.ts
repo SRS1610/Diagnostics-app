@@ -1,6 +1,5 @@
 // Signup (creates a tenant + its OWNER), login, and accepting a team invite.
 
-import { createHash, randomBytes } from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
@@ -10,11 +9,10 @@ import { db } from "../lib/db";
 import { DEFAULT_AFTER_HOURS_TEXT, DEFAULT_MISSED_TEXT } from "../lib/text";
 import { DEFAULT_HOURS, validTimeZone } from "../lib/time";
 import { audit } from "../core/audit";
+import { hashToken } from "../core/invites";
 import type { Deps } from "../core/deps";
 import { HttpError, email, password, personName, phone } from "./common";
 
-export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
-export const newInviteToken = () => randomBytes(32).toString("base64url");
 
 const asActor = (u: { id: string; name: string; role: Session["role"]; businessId: string | null }): Session => ({
   userId: u.id, name: u.name, role: u.role, businessId: u.businessId, viewAs: false, suspended: false,

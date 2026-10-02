@@ -766,7 +766,8 @@ async function platformRoute(page, id) {
   $("#support-bar").hidden = true;
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === (page === "platform-activity" ? page : "platform")));
   try {
-    if (page === "platform" && id) await renderTenant(id);
+    if (page === "platform" && id === "new") await renderNewTenant();
+    else if (page === "platform" && id) await renderTenant(id);
     else if (page === "platform-activity") await renderPlatformActivity();
     else await renderPlatform();
   } catch (e) {
@@ -779,7 +780,8 @@ async function renderPlatform() {
   const qs = new URLSearchParams({ ...(PQ ? { q: PQ } : {}), ...(PSTATUS ? { status: PSTATUS } : {}) });
   const [o, { tenants }] = await Promise.all([api("/platform/overview"), api(`/platform/tenants?${qs}`)]);
   view.innerHTML = `
-    <div class="head"><div><h1>Businesses</h1><p>Every company on TradeCall. Changes here are logged in that business's own activity.</p></div></div>
+    <div class="head"><div><h1>Businesses</h1><p>Every company on TradeCall. Changes here are logged in that business's own activity.</p></div>
+      <a class="btn" href="#/platform/new">+ New business</a></div>
     <div class="grid tiles">
       <div class="panel tile"><div class="k">Active businesses</div><div class="v">${o.tenants.ACTIVE || 0}</div><div class="d">${Object.entries(o.activeByPlan).map(([k, n]) => `${n} ${PLAN[k]}`).join(" · ") || "—"}</div></div>
       <div class="panel tile"><div class="k">Suspended</div><div class="v">${o.tenants.SUSPENDED || 0}</div><div class="d">service paused</div></div>
@@ -818,7 +820,7 @@ async function renderPlatform() {
 }
 
 async function renderTenant(id) {
-  const { tenant: t, users, activity } = await api(`/platform/tenants/${encodeURIComponent(id)}`);
+  const { tenant: t, users, invites, activity } = await api(`/platform/tenants/${encodeURIComponent(id)}`);
   view.innerHTML = `
     <p><a href="#/platform" class="small">← All businesses</a></p>
     <div class="head"><div><h1>${esc(t.name)} <span class="tag ${t.status}">${t.status === "ACTIVE" ? "Active" : "Suspended"}</span></h1>
@@ -835,6 +837,8 @@ async function renderTenant(id) {
         <h2>Account</h2>
         <form id="tform">
           <div class="fgrid">
+            <label>Business name<input name="name" value="${esc(t.name)}" required maxlength="80"></label>
+            <label>Contact / billing email<input name="email" type="email" value="${esc(t.email)}" required></label>
             <label>Plan<select name="plan">${Object.entries(PLAN).map(([k, l]) => `<option value="${k}" ${k === t.plan ? "selected" : ""}>${l}</option>`).join("")}</select></label>
             <label>Telnyx messaging profile<input name="messagingProfileId" value="${esc(t.messagingProfileId || "")}" placeholder="platform default">
               <div class="hint">Set once this business's 10DLC brand + campaign is approved.</div></label>
@@ -849,7 +853,20 @@ async function renderTenant(id) {
             : `<button class="btn" id="reactivate">Reactivate service</button>`}
         </div>
       </section>
-      <section class="panel"><h2>Users</h2><table class="list"><tbody>${users.map((u) => `<tr><td><b>${esc(u.name)}</b><div class="muted small">${esc(u.email)}</div></td><td><span class="tag role">${ROLE[u.role]}</span></td><td class="muted small">${u.active ? (u.lastLoginAt ? agoText(u.lastLoginAt) : "never signed in") : "removed"}</td></tr>`).join("")}</tbody></table></section>
+      <section class="panel"><h2>Users</h2>
+        ${users.length ? `<div class="tbl-wrap"><table class="list"><tbody>${users.map((u) => `<tr><td><b>${esc(u.name)}</b><div class="muted small">${esc(u.email)}</div></td><td><span class="tag role">${ROLE[u.role]}</span></td><td class="muted small">${u.active ? (u.lastLoginAt ? agoText(u.lastLoginAt) : "never signed in") : "removed"}</td></tr>`).join("")}</tbody></table></div>`
+          : `<p class="muted" style="margin:0">Nobody has joined yet.</p>`}
+        ${invites.length ? `<h2 style="margin-top:16px">Waiting to join</h2><div class="tbl-wrap"><table class="list"><tbody>${invites.map((i) => `<tr><td class="wrap">${esc(i.email)} <span class="tag role">${ROLE[i.role]}</span>
+          <div class="muted small">link expires ${new Date(i.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div></td><td style="text-align:right"><button class="btn danger" data-cancel="${esc(i.id)}">Cancel</button></td></tr>`).join("")}</tbody></table></div>` : ""}
+        <h2 style="margin-top:16px">Invite someone</h2>
+        <form id="pinvite" class="row" style="align-items:flex-end">
+          <label style="flex:1;min-width:180px;margin:0">Email<input name="email" type="email" required></label>
+          <label style="margin:0">Role<select name="role">${["OWNER", "ADMIN", "MEMBER"].map((r) => `<option value="${r}">${ROLE[r]}</option>`).join("")}</select></label>
+          <button class="btn alt">Send invite</button>
+        </form>
+        <div id="pinvite-out"></div>
+        <p class="hint">Re-inviting the same email replaces their old link — use this when an owner lost theirs.</p>
+      </section>
     </div>
     <section class="panel" style="margin-top:14px"><h2>Activity</h2>
       ${activity.length ? `<div class="tbl-wrap"><table class="list"><tbody>${activity.map((e) => activityRow(e)).join("")}</tbody></table></div>` : `<p class="muted">Nothing yet.</p>`}</section>`;
@@ -858,7 +875,7 @@ async function renderTenant(id) {
     ev.preventDefault();
     const f = ev.target;
     try {
-      await api(`/platform/tenants/${t.id}`, { method: "PATCH", body: { plan: f.plan.value, messagingProfileId: f.messagingProfileId.value.trim() || null, phoneNumber: f.phoneNumber.value.trim() || null } });
+      await api(`/platform/tenants/${t.id}`, { method: "PATCH", body: { name: f.name.value.trim(), email: f.email.value.trim(), plan: f.plan.value, messagingProfileId: f.messagingProfileId.value.trim() || null, phoneNumber: f.phoneNumber.value.trim() || null } });
       toast("Saved");
       renderTenant(t.id);
     } catch (e) { toast(e.message); }
@@ -870,6 +887,18 @@ async function renderTenant(id) {
   });
   $("#reactivate")?.addEventListener("click", async () => {
     try { await api(`/platform/tenants/${t.id}/reactivate`, { method: "POST" }); renderTenant(t.id); } catch (e) { toast(e.message); }
+  });
+  view.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", async () => {
+    try { await api(`/platform/tenants/${t.id}/invites/${b.dataset.cancel}`, { method: "DELETE" }); renderTenant(t.id); } catch (e) { toast(e.message); }
+  }));
+  $("#pinvite").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      const r = await api(`/platform/tenants/${t.id}/invites`, { method: "POST", body: Object.fromEntries(new FormData(ev.target)) });
+      await renderTenant(t.id);
+      $("#pinvite-out").innerHTML = inviteLinkBox(r);
+      bindCopy(r.link);
+    } catch (e) { toast(e.message); }
   });
   $("#view-as").addEventListener("click", async () => {
     try {
@@ -886,4 +915,57 @@ async function renderPlatformActivity() {
   view.innerHTML = `<div class="head"><div><h1>Activity</h1><p>The latest 100 events across every business.</p></div></div>
     <section class="panel"><div class="tbl-wrap"><table class="list"><thead><tr><th>When</th><th>Business</th><th>What happened</th></tr></thead>
     <tbody>${entries.map((e) => activityRow(e, true)).join("")}</tbody></table></div></section>`;
+}
+
+
+function inviteLinkBox(r) {
+  return `<p class="small" style="margin:10px 0 0">${r.emailed ? "Invite emailed. " : "Email isn't set up on the server, so send them this link yourself. "}The link works once and expires in 7 days:</p>
+    <div class="linkbox"><input readonly value="${esc(r.link)}"><button type="button" class="btn alt" id="copy">Copy</button></div>`;
+}
+function bindCopy(link) {
+  $("#copy")?.addEventListener("click", () => navigator.clipboard?.writeText(link).then(() => toast("Link copied"), () => toast("Couldn't copy — select the link and copy it")));
+}
+
+async function renderNewTenant() {
+  const zones = ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
+  const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zone = zones.includes(mine) ? mine : "America/New_York";
+  view.innerHTML = `
+    <p><a href="#/platform" class="small">← All businesses</a></p>
+    <div class="head"><div><h1>New business</h1><p>Set up an account for a customer. Their owner gets an invite to set their own password — you never see it.</p></div></div>
+    <form class="panel" id="newt" style="max-width:720px">
+      <div class="fgrid">
+        <label>Business name<input name="businessName" required maxlength="80" placeholder="Peak Roofing"></label>
+        <label>Plan<select name="plan">${Object.entries(PLAN).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+        <label>Owner's first name<input name="ownerName" required maxlength="60"><div class="hint">Used in their customer texts ("Ray will call you back").</div></label>
+        <label>Owner's email<input name="ownerEmail" type="email" required><div class="hint">Their login, and where the invite goes.</div></label>
+        <label>Owner's cell<input name="ownerPhone" type="tel" required placeholder="(555) 123-4567"><div class="hint">Rings first when customers call.</div></label>
+        <label>Timezone<select name="timezone">${zones.map((z) => `<option ${z === zone ? "selected" : ""}>${esc(z)}</option>`).join("")}</select></label>
+      </div>
+      <div class="err" id="nerr"></div>
+      <button class="btn">Create business and invite owner</button>
+      <p class="hint">Next: get them a number (from their Settings, or assign one you already own on the business's page) and register their 10DLC brand in Telnyx.</p>
+    </form>`;
+  $("#newt").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const btn = ev.target.querySelector("button");
+    btn.disabled = true;
+    try {
+      const r = await api("/platform/tenants", { method: "POST", body: Object.fromEntries(new FormData(ev.target)) });
+      location.hash = `#/platform/${r.tenant.id}`;
+      // Show the owner's invite link once the business page has rendered.
+      let tries = 0;
+      const show = () => {
+        const out = $("#pinvite-out");
+        if (!out) return ++tries < 100 && setTimeout(show, 50);
+        out.innerHTML = inviteLinkBox(r);
+        bindCopy(r.link);
+        toast(`${r.tenant.name} created`);
+      };
+      show();
+    } catch (e) {
+      $("#nerr").textContent = e.message;
+      btn.disabled = false;
+    }
+  });
 }
