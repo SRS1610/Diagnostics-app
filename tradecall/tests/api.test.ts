@@ -10,17 +10,21 @@ beforeEach(async () => {
 afterAll(() => db.$disconnect());
 
 describe("accounts", () => {
-  it("signs up, signs in, rejects bad passwords and duplicate emails", async () => {
+  it("signup creates a business with its owner; login is per user", async () => {
     const res = await request(h.app)
       .post("/api/auth/signup")
       .send({ businessName: "Cool Air HVAC", ownerName: "Sam", email: "Sam@CoolAir.com", password: "correct horse", ownerPhone: "(555) 010-4444", timezone: "America/Chicago" })
       .expect(201);
-    expect(res.body.business).toMatchObject({ email: "sam@coolair.com", ownerPhone: "+15550104444" });
-    expect(res.body.business.passwordHash).toBeUndefined();
+    const me = (await h.as(res.body.token).get("/me").expect(200)).body;
+    expect(me.business).toMatchObject({ name: "Cool Air HVAC", ownerPhone: "+15550104444", plan: "STARTER", status: "ACTIVE" });
+    expect(me.user).toMatchObject({ email: "sam@coolair.com", role: "OWNER", phone: "+15550104444", getsAlerts: true });
+    expect(JSON.stringify(me)).not.toContain("passwordHash");
+
     await request(h.app).post("/api/auth/login").send({ email: "sam@coolair.com", password: "correct horse" }).expect(200);
     await request(h.app).post("/api/auth/login").send({ email: "sam@coolair.com", password: "wrong" }).expect(401);
     await request(h.app).post("/api/auth/signup").send({ businessName: "Again", ownerName: "S", email: "sam@coolair.com", password: "12345678", ownerPhone: "5550104444" }).expect(409);
     await request(h.app).get("/api/leads").expect(401);
+    expect((await db.auditLog.findMany({ orderBy: { createdAt: "asc" } })).map((a) => a.action)).toEqual(["tenant_created", "login"]);
   });
 });
 
@@ -46,10 +50,10 @@ describe("tenant isolation", () => {
     expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("NEW");
   });
 
-  it("won't let two businesses claim the same number", async () => {
+  it("won't let a business claim a number it doesn't own", async () => {
     await business();
     const b = await business({ phoneNumber: null as never, ownerPhone: "+15550100002" });
-    await h.api(b).patch("/settings", { phoneNumber: "+15550109999" }).expect(409);
+    await h.api(b).patch("/settings", { phoneNumber: "+15550109999" }).expect(400); // not settable by tenants at all
     await h.api(b).post("/numbers/buy", { phoneNumber: "+15550109999" }).expect(409);
   });
 });

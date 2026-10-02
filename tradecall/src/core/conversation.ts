@@ -1,6 +1,6 @@
 // Inbound texts to a business number. Two very different senders:
-//   • the OWNER — replying to an alert, which relays to the customer
-//   • a CUSTOMER — opt-out keywords, the intake questions, owner alerts
+//   • a TEAM MEMBER — replying to an alert, which relays to the customer
+//   • a CUSTOMER — opt-out keywords, the intake questions, team alerts
 
 import type { Business, Lead } from "@prisma/client";
 import { db } from "../lib/db";
@@ -10,7 +10,8 @@ import type { ProviderEvent } from "../providers/types";
 import type { Deps } from "./deps";
 import { cancelJobs } from "./jobs";
 import { openLeadFor } from "./leads";
-import { NoNumberError, OptedOutError, leadUrl, optedOut, textLead, textOwner } from "./outbox";
+import { NoNumberError, OptedOutError, leadUrl, optedOut, textLead, textMember, textTeam } from "./outbox";
+import { teamMemberByPhone } from "./team";
 
 // CTIA keywords. Carriers/the provider send the STOP confirmation
 // themselves, so we only record state and never reply to these.
@@ -28,15 +29,27 @@ export async function handleInboundSms(deps: Deps, ev: Sms): Promise<string> {
   const from = toE164(ev.from);
   const b = to ? await db.business.findUnique({ where: { phoneNumber: to } }) : null;
   if (!b || !from) return "ignored";
-  if (from === b.ownerPhone) return ownerRelay(deps, b, ev.text.trim());
+  const member = await teamMemberByPhone(b, from);
+  if (b.status === "SUSPENDED") {
+    // Service is off, but an opt-out must still be honoured whenever the
+    // business comes back.
+    if (!member && STOP.has(ev.text.trim().toUpperCase().replace(/[^A-Z]/g, ""))) {
+      await db.optOut.upsert({ where: { businessId_phone: { businessId: b.id, phone: from } }, create: { businessId: b.id, phone: from }, update: {} });
+      return "opted_out";
+    }
+    return "suspended";
+  }
+  if (member) return teamRelay(deps, b, from, member.name, ev.text.trim());
   return customerText(deps, b, from, ev);
 }
 
-// ---------------- owner → customer relay ----------------
+// ---------------- team member → customer relay ----------------
 
 const RELAY_HELP = "TradeCall: reply to an alert to text that customer, or send #<lead number> <message> (e.g. #12 On my way). Send LEADS to list open leads.";
 
-async function ownerRelay(deps: Deps, b: Business, text: string): Promise<string> {
+async function teamRelay(deps: Deps, b: Business, from: string, sender: string, text: string): Promise<string> {
+  // Replies to commands go to whoever texted, not the whole team.
+  const reply = (t: string) => textMember(deps, b, from, t);
   if (/^leads$/i.test(text)) {
     const open = await db.lead.findMany({
       where: { businessId: b.id, stage: { in: ["NEW", "ENGAGED", "QUALIFIED", "SCHEDULED"] } },
@@ -44,7 +57,7 @@ async function ownerRelay(deps: Deps, b: Business, text: string): Promise<string
       take: 6,
     });
     const lines = open.map((l) => `#${l.code} ${prettyPhone(l.phone)}${l.urgent ? " 🚨" : ""}${l.job ? ` – ${l.job.slice(0, 40)}` : ""}`);
-    await textOwner(deps, b, lines.length ? `Open leads:\n${lines.join("\n")}` : "No open leads right now.");
+    await reply(lines.length ? `Open leads:\n${lines.join("\n")}` : "No open leads right now.");
     return "owner_list";
   }
 
@@ -55,22 +68,22 @@ async function ownerRelay(deps: Deps, b: Business, text: string): Promise<string
     lead = await db.lead.findUnique({ where: { businessId_code: { businessId: b.id, code: Number(tagged[1]) } } });
     body = tagged[2].trim();
     if (!lead) {
-      await textOwner(deps, b, `TradeCall: there's no lead #${tagged[1]}.`);
+      await reply(`TradeCall: there's no lead #${tagged[1]}.`);
       return "owner_unknown_lead";
     }
   } else if (b.lastAlertLeadId) {
     lead = await db.lead.findFirst({ where: { id: b.lastAlertLeadId, businessId: b.id } });
   }
   if (!lead || !body) {
-    await textOwner(deps, b, RELAY_HELP);
+    await reply(RELAY_HELP);
     return "owner_help";
   }
 
   try {
-    await textLead(deps, b, lead, body, "OWNER", { template: false });
+    await textLead(deps, b, lead, body, "OWNER", { template: false, sentBy: sender });
   } catch (err) {
     const why = err instanceof OptedOutError || err instanceof NoNumberError ? err.message : "the text didn't go through. Try again from the dashboard.";
-    await textOwner(deps, b, `TradeCall: couldn't text #${lead.code} — ${why}`);
+    await reply(`TradeCall: couldn't text #${lead.code} — ${why}`);
     return "owner_failed";
   }
   // A human has taken over: stop the bot.
@@ -118,7 +131,7 @@ async function customerText(deps: Deps, b: Business, from: string, ev: Sms): Pro
   }
   if (wasOptedOut && START.has(word)) {
     await db.optOut.delete({ where: { businessId_phone: { businessId: b.id, phone: from } } });
-    await textOwner(deps, b, `#${lead.code} ${prettyPhone(from)} opted back in to texts.`, lead);
+    await textTeam(deps, b, `#${lead.code} ${prettyPhone(from)} opted back in to texts.`, lead);
     return "opted_in";
   }
   if (HELP.has(word)) return "help";
@@ -134,7 +147,7 @@ async function customerText(deps: Deps, b: Business, from: string, ev: Sms): Pro
   });
 
   if (wasOptedOut || step === 0) {
-    await textOwner(deps, b, `#${current.code} ${prettyPhone(from)}: "${text}"\nReply to this text to answer them.`, current);
+    await textTeam(deps, b, `#${current.code} ${prettyPhone(from)}: "${text}"\nReply to this text to answer them.`, current);
     return "forwarded";
   }
 
@@ -156,6 +169,6 @@ async function customerText(deps: Deps, b: Business, from: string, ev: Sms): Pro
     data: { urgent: current.urgent || yes, intakeStep: 0, ...(current.stage === "ENGAGED" ? { stage: "QUALIFIED" as const } : {}) },
   });
   await textLead(deps, b, current, current.urgent ? INTAKE_DONE_URGENT : INTAKE_DONE, "INTAKE");
-  await textOwner(deps, b, summary(b, current), current);
+  await textTeam(deps, b, summary(b, current), current);
   return "qualified";
 }

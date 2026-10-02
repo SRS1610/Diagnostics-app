@@ -13,7 +13,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "test": "jest --runInBand",
-    "test:setup": "DATABASE_URL=${TEST_DATABASE_URL:-postgresql://textback:textback_dev@localhost:5432/tradecall_test} prisma migrate deploy"
+    "test:setup": "DATABASE_URL=${TEST_DATABASE_URL:-postgresql://textback:textback_dev@localhost:5432/tradecall_test} prisma migrate deploy",
+    "platform:admin": "tsx scripts/platform-admin.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

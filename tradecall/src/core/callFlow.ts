@@ -23,7 +23,8 @@ import { VOICE_GREETING, VOICE_LEAVE_MESSAGE, VOICE_SCREEN, VOICE_SELF_TEST, fil
 import { ProviderError, type ProviderEvent } from "../providers/types";
 import type { Deps } from "./deps";
 import { onMissedCall } from "./missed";
-import { leadUrl, textOwner, vars } from "./outbox";
+import { leadUrl, textTeam, vars } from "./outbox";
+import { teamMemberByPhone } from "./team";
 
 const SCREEN_TIMEOUT_MS = 8000;
 const VOICEMAIL_MAX_SECONDS = 120;
@@ -185,14 +186,16 @@ export async function handleVoiceEvent(deps: Deps, ev: VoiceEvent): Promise<void
 async function incoming(deps: Deps, ev: Extract<ProviderEvent, { type: "call.incoming" }>) {
   const to = toE164(ev.to);
   const b = to ? await db.business.findUnique({ where: { phoneNumber: to } }) : null;
-  if (!b) {
+  // Unknown number, or a suspended tenant: the service is off, don't answer.
+  if (!b || b.status === "SUSPENDED") {
     await tolerate(deps.provider.hangup(ev.legId));
     return;
   }
   const from = toE164(ev.from) ?? (ev.from || "anonymous");
   const now = deps.now();
 
-  const isOwner = from === b.ownerPhone;
+  // Anyone on the team calling the business number is testing the line.
+  const isOwner = (await teamMemberByPhone(b, from)) !== null;
   const initial: CallState = isOwner ? "SELF_TEST" : b.callMode === "FORWARDED" ? "VOICEMAIL" : "RINGING_OWNER";
 
   let call: Call;
@@ -246,7 +249,7 @@ async function recordingReady(deps: Deps, ev: Extract<ProviderEvent, { type: "ca
   const { audio, mimeType } = await deps.provider.downloadRecording(ev.url);
   await db.voicemail.create({ data: { businessId: call.businessId, callId: call.id, audio, mimeType } });
   const who = call.lead ? `#${call.lead.code} ${prettyPhone(call.fromNumber)}` : prettyPhone(call.fromNumber);
-  await textOwner(
+  await textTeam(
     deps,
     call.business,
     `🎙 New voicemail from ${who}.${call.lead ? `\n${leadUrl(call.lead)}` : ""}`,

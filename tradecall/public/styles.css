@@ -30,6 +30,8 @@
 }
 
 * { box-sizing: border-box; }
+/* `hidden` must always win over component display rules. */
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
 a { color: var(--link); text-decoration: none; }
@@ -168,3 +170,32 @@ label.check input { width: auto; margin: 3px 0 0; }
 .auth-card { width: 100%; max-width: 420px; }
 .auth-card .mark { margin-bottom: 14px; }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--panel); padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 20; max-width: calc(100% - 32px); }
+
+/* ---------- multi-tenant additions ---------- */
+.support-bar { background: #4a3aa7; color: #fff; padding: 9px 28px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+.support-bar button { background: #fff; color: #4a3aa7; border: 0; border-radius: 8px; padding: 5px 12px; font: inherit; font-weight: 700; cursor: pointer; }
+.notice.bad { background: var(--bad-bg); color: var(--bad); }
+/* The platform console must never be mistakable for a business's own view. */
+body.platform { --side: #1e1747; --side-hi: #2d2466; --brand: #6a5ae0; --brand-soft: #e9e6fb; }
+body.platform .mark { background: #6a5ae0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body.platform { --brand-soft: #2a2450; } }
+.console-tag { display: inline-block; font-size: 10.5px; letter-spacing: .08em; font-weight: 800; color: #c9c2ff; text-transform: uppercase; }
+.meter { height: 8px; background: var(--sunk); border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
+.meter > div { height: 100%; background: var(--seq); border-radius: 99px; }
+.meter.over > div { background: var(--warn); }
+.tbl-wrap { overflow-x: auto; }
+table.list td, table.list th { white-space: nowrap; }
+table.list td.wrap { white-space: normal; }
+tr.link { cursor: pointer; }
+tr.link:hover td { background: var(--bg); }
+.tag.SUSPENDED { background: var(--bad-bg); color: var(--bad); }
+.tag.ACTIVE { background: var(--good-bg); color: var(--good); }
+.tag.role { background: var(--sunk); }
+.inline { display: inline-flex; gap: 6px; align-items: center; }
+select.compact, input.compact { width: auto; padding: 4px 8px; font-size: 13px; }
+.linkbox { display: flex; gap: 8px; margin-top: 8px; }
+.linkbox input { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+@media (max-width: 820px) { .support-bar { padding: 9px 16px; } }
+
+/* Let wide tables scroll inside their panel instead of widening the page. */
+.grid > *, .panel { min-width: 0; }

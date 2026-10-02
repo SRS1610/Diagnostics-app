@@ -2,6 +2,7 @@ import request from "supertest";
 import type { Business } from "@prisma/client";
 import { createApp } from "../src/app";
 import type { Deps } from "../src/core/deps";
+import type { UserRole } from "@prisma/client";
 import { issueToken } from "../src/lib/auth";
 import { db } from "../src/lib/db";
 import { MemoryMailer } from "../src/lib/mail";
@@ -42,8 +43,15 @@ export function harness(provider: Provider = new FakeProvider()) {
     async sms(text: string, from = CALLER, to = NUMBER) {
       return h.event({ type: "sms.received", providerId: `in-${++n}`, from, to, text } as never);
     },
+    /** Call the API as the OWNER that business() created for b. */
     api(b: Business) {
-      const auth = `Bearer ${issueToken(b.id)}`;
+      const owner = owners.get(b.id);
+      if (!owner) throw new Error("api(b) needs a business made by business()");
+      return h.as({ id: owner });
+    },
+    /** Call the API with any user's (or a raw) token. */
+    as(u: { id: string } | string) {
+      const auth = `Bearer ${typeof u === "string" ? u : issueToken(u)}`;
       return {
         get: (p: string) => request(app).get(`/api${p}`).set("authorization", auth),
         post: (p: string, body?: object) => request(app).post(`/api${p}`).set("authorization", auth).send(body),
@@ -58,17 +66,29 @@ export function harness(provider: Provider = new FakeProvider()) {
 export type Harness = ReturnType<typeof harness>;
 
 export async function reset() {
-  await db.$executeRawUnsafe('TRUNCATE "WebhookEvent", "Job", "Message", "Voicemail", "Call", "OptOut", "Lead", "Business" CASCADE');
+  await db.$executeRawUnsafe('TRUNCATE "WebhookEvent", "Job", "Message", "Voicemail", "Call", "OptOut", "Lead", "AuditLog", "Invite", "User", "Business" CASCADE');
 }
 
 let seq = 0;
-export function business(over: Partial<Business> = {}): Promise<Business> {
+const owners = new Map<string, string>();
+/** A business plus its OWNER user (Dana, alerts on, phone = OWNER unless overridden). */
+export async function business(over: Partial<Business> = {}): Promise<Business> {
   seq++;
-  return db.business.create({
+  const b = await db.business.create({
     data: {
-      name: "Rapid Rooter", ownerName: "Dana", email: `owner${seq}@example.com`, passwordHash: "x", ownerPhone: OWNER, phoneNumber: NUMBER,
+      name: "Rapid Rooter", ownerName: "Dana", email: `owner${seq}@example.com`, ownerPhone: OWNER, phoneNumber: NUMBER,
       timezone: "America/New_York", hours: DEFAULT_HOURS, missedText: DEFAULT_MISSED_TEXT, afterHoursText: DEFAULT_AFTER_HOURS_TEXT, ...over,
     } as never,
+  });
+  const owner = await db.user.create({ data: { businessId: b.id, email: `owner${seq}@example.com`, passwordHash: "x", name: "Dana", role: "OWNER", phone: b.ownerPhone, getsAlerts: true } });
+  owners.set(b.id, owner.id);
+  return b;
+}
+
+export function user(b: Business | null, role: UserRole, over: { phone?: string | null; getsAlerts?: boolean; name?: string; active?: boolean } = {}) {
+  seq++;
+  return db.user.create({
+    data: { businessId: b?.id ?? null, email: `user${seq}@example.com`, passwordHash: "x", name: over.name ?? `${role.toLowerCase()} ${seq}`, role, phone: over.phone ?? null, getsAlerts: over.getsAlerts ?? false, active: over.active ?? true },
   });
 }
 

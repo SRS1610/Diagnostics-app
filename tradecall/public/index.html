@@ -10,14 +10,20 @@
   <div class="shell" id="shell" hidden>
     <aside class="side">
       <div class="brand"><span class="mark" aria-hidden="true">TC</span><span><b id="biz">TradeCall</b><small id="biz-number"></small></span></div>
-      <nav>
+      <nav id="tenant-nav">
         <a href="#/dashboard" data-nav="dashboard"><span aria-hidden="true">▦</span> Dashboard</a>
         <a href="#/inbox" data-nav="inbox"><span aria-hidden="true">✉</span> Inbox <em id="open-count" hidden></em></a>
-        <a href="#/settings" data-nav="settings"><span aria-hidden="true">⚙</span> Settings</a>
+        <a href="#/team" data-nav="team"><span aria-hidden="true">☺</span> Team</a>
+        <a href="#/settings" data-nav="settings" data-manager><span aria-hidden="true">⚙</span> Settings</a>
+      </nav>
+      <nav id="platform-nav" hidden>
+        <a href="#/platform" data-nav="platform"><span aria-hidden="true">▤</span> Businesses</a>
+        <a href="#/platform-activity" data-nav="platform-activity"><span aria-hidden="true">≡</span> Activity</a>
       </nav>
       <button class="ghost" id="signout">Sign out</button>
     </aside>
     <div class="main">
+      <div class="support-bar" id="support-bar" hidden></div>
       <div class="notice" id="notice" hidden></div>
       <main id="view"></main>
     </div>

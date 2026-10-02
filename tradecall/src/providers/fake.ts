@@ -14,7 +14,7 @@ export type Command =
 export class FakeProvider implements Provider {
   readonly name = "fake";
   commands: Command[] = [];
-  sms: { from: string; to: string; text: string; providerId: string }[] = [];
+  sms: { from: string; to: string; text: string; providerId: string; messagingProfileId?: string | null }[] = [];
   bought: string[] = [];
   failNextSms = false;
   recordings = new Map<string, Buffer>();
@@ -55,7 +55,7 @@ export class FakeProvider implements Provider {
     return { audio: this.recordings.get(url) ?? Buffer.from("ID3-fake-mp3"), mimeType: "audio/mpeg" };
   }
 
-  async sendSms(args: { from: string; to: string; text: string }) {
+  async sendSms(args: { from: string; to: string; text: string; messagingProfileId?: string | null }) {
     if (this.failNextSms) {
       this.failNextSms = false;
       throw new Error("Simulated provider failure");

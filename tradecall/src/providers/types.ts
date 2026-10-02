@@ -62,11 +62,12 @@ export interface Provider {
   downloadRecording(url: string): Promise<{ audio: Buffer; mimeType: string }>;
 
   // --- messaging ---
-  sendSms(args: { from: string; to: string; text: string }): Promise<{ providerId: string; status: string }>;
+  /** messagingProfileId: the tenant's own profile (10DLC is registered per business); falls back to the platform default. */
+  sendSms(args: { from: string; to: string; text: string; messagingProfileId?: string | null }): Promise<{ providerId: string; status: string }>;
 
   // --- numbers ---
   searchNumbers(areaCode: string): Promise<AvailableNumber[]>;
-  buyNumber(phoneNumber: string): Promise<void>;
+  buyNumber(phoneNumber: string, opts?: { messagingProfileId?: string | null }): Promise<void>;
 }
 
 /** Thrown for provider API errors; `gone` = the call already ended. */

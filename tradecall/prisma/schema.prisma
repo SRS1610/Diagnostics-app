@@ -1,8 +1,10 @@
 // TradeCall data model.
 //
-// Business is the tenant. Every other row carries businessId; dashboard
-// queries scope by the signed-in owner's businessId, and provider webhooks
-// resolve the business from the phone number that was called or texted.
+// Multi-tenant: Business is the tenant. Every tenant-owned row carries
+// businessId. Dashboard queries scope by the signed-in user's businessId
+// (never a value from the request); provider webhooks resolve the business
+// from the phone number that was called or texted. PLATFORM_ADMIN users
+// belong to no business and operate across tenants through /api/platform.
 
 generator client {
   provider = "prisma-client-js"
@@ -79,15 +81,46 @@ enum JobStatus {
   FAILED
 }
 
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED // service off: calls aren't answered or texted, writes blocked
+}
+
+enum Plan {
+  STARTER
+  PRO
+  TEAM
+}
+
+enum UserRole {
+  OWNER // everything, incl. team owners and plan
+  ADMIN // settings + team (not owners)
+  MEMBER // inbox only
+  PLATFORM_ADMIN // runs the platform; belongs to no business
+}
+
+enum ActorKind {
+  USER
+  PLATFORM
+  SYSTEM
+}
+
 model Business {
-  id           String  @id @default(cuid())
-  name         String
-  ownerName    String
-  email        String  @unique
-  passwordHash String
-  ownerPhone   String // E.164 — rings first, receives alerts, can reply by SMS
-  phoneNumber  String? @unique // the provider number customers call/text
-  timezone     String  @default("America/New_York")
+  id          String  @id @default(cuid())
+  name        String
+  ownerName   String // first name used in customer texts ("{owner} will call you")
+  email       String // contact / billing email
+  ownerPhone  String // E.164 — the cell that rings first in RING_OWNER mode
+  phoneNumber String? @unique // the provider number customers call/text
+  timezone    String  @default("America/New_York")
+
+  status          TenantStatus @default(ACTIVE)
+  suspendedReason String?
+  plan            Plan         @default(STARTER)
+  // Per-tenant Telnyx messaging profile. US 10DLC registers each business's
+  // brand separately, so each tenant gets its own profile once registered;
+  // null falls back to the platform default (TELNYX_MESSAGING_PROFILE_ID).
+  messagingProfileId String?
 
   callMode         CallMode @default(RING_OWNER)
   ringSeconds      Int      @default(18)
@@ -121,6 +154,64 @@ model Business {
   optOuts    OptOut[]
   jobs       Job[]
   voicemails Voicemail[]
+  users      User[]
+  invites    Invite[]
+  auditLogs  AuditLog[]
+
+  @@index([status])
+}
+
+model User {
+  id           String    @id @default(cuid())
+  businessId   String? // null only for PLATFORM_ADMIN
+  business     Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         UserRole
+  phone        String? // E.164; needed to get alerts or reply to customers by SMS
+  getsAlerts   Boolean   @default(false)
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([businessId])
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  businessId  String
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  email       String
+  role        UserRole
+  // Only the SHA-256 of the token is stored; the token itself is only ever
+  // in the invite link.
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  invitedById String
+  createdAt   DateTime  @default(now())
+
+  @@index([businessId])
+}
+
+// Who did what. Tenant rows carry businessId; platform-only actions may not.
+model AuditLog {
+  id         String    @id @default(cuid())
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  actorId    String?
+  actorName  String
+  actorKind  ActorKind
+  action     String
+  target     String?
+  details    Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([createdAt])
 }
 
 model Call {
@@ -207,6 +298,8 @@ model Message {
   providerId String?     @unique
   status     String // queued | sent | delivered | failed | received
   error      String?
+  // Team member who sent an OWNER message (name kept as it was at send time).
+  sentBy     String?
   createdAt  DateTime    @default(now())
 
   @@index([businessId, createdAt])

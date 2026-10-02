@@ -193,12 +193,13 @@ export class TelnyxProvider implements Provider {
     return { audio: Buffer.from(await res.arrayBuffer()), mimeType: res.headers.get("content-type") ?? "audio/mpeg" };
   }
 
-  async sendSms(args: { from: string; to: string; text: string }) {
+  async sendSms(args: { from: string; to: string; text: string; messagingProfileId?: string | null }) {
+    const profile = args.messagingProfileId || this.cfg.messagingProfileId;
     const res = await this.request<{ data: { id: string; to?: { status?: string }[] } }>("POST", "/messages", {
       from: args.from,
       to: args.to,
       text: args.text,
-      ...(this.cfg.messagingProfileId ? { messaging_profile_id: this.cfg.messagingProfileId } : {}),
+      ...(profile ? { messaging_profile_id: profile } : {}),
     });
     return { providerId: res.data.id, status: res.data.to?.[0]?.status ?? "queued" };
   }
@@ -225,13 +226,14 @@ export class TelnyxProvider implements Provider {
       });
   }
 
-  async buyNumber(phoneNumber: string) {
+  async buyNumber(phoneNumber: string, opts: { messagingProfileId?: string | null } = {}) {
+    const profile = opts.messagingProfileId || this.cfg.messagingProfileId;
     // Assigning the Call Control app + messaging profile on the order means
     // the number's calls and texts hit our webhooks as soon as it's active.
     await this.request("POST", "/number_orders", {
       phone_numbers: [{ phone_number: phoneNumber }],
       connection_id: this.cfg.connectionId,
-      ...(this.cfg.messagingProfileId ? { messaging_profile_id: this.cfg.messagingProfileId } : {}),
+      ...(profile ? { messaging_profile_id: profile } : {}),
     });
   }
 }

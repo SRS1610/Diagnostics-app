@@ -1,41 +1,38 @@
-// Owner API for the dashboard. Every lookup is scoped by tenant(res) — a
-// lead/call id belonging to another business is simply "not found".
+// Dashboard API. Layout:
+//   /api/auth/*        signup, login, invites (no session)
+//   /api/platform/*    platform admins, across tenants
+//   everything else    inside ONE tenant: every lookup is scoped by
+//                      tenant(res) — another business's id is "not found".
 
 import { Router, json } from "express";
-import rateLimit from "express-rate-limit";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { Prisma, type Business } from "@prisma/client";
-import { issueToken, requireOwner, tenant } from "../lib/auth";
+import { requireUser, session, tenant } from "../lib/auth";
 import { config } from "../lib/config";
 import { db } from "../lib/db";
-import { toE164 } from "../lib/phone";
-import { DEFAULT_AFTER_HOURS_TEXT, DEFAULT_MISSED_TEXT } from "../lib/text";
-import { DAYS, DEFAULT_HOURS, validTimeZone } from "../lib/time";
+import { PLANS } from "../lib/plans";
+import { DAYS, validTimeZone } from "../lib/time";
+import { audit } from "../core/audit";
 import type { Deps } from "../core/deps";
 import { cancelJobs, scheduleReminders } from "../core/jobs";
-import { NoNumberError, OptedOutError, textLead } from "../core/outbox";
+import { NoNumberError, OptedOutError, SuspendedError, textLead } from "../core/outbox";
 import { compare } from "../core/stats";
+import { seatUsage, textUsage } from "../core/team";
+import { authRoutes } from "./authRoutes";
+import { HttpError, phone } from "./common";
+import { allow, blockWritesWhenReadOnly, requireTenant } from "./guards";
+import { platformRoutes } from "./platform";
+import { teamRoutes } from "./teamRoutes";
 
-export class HttpError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
+export { HttpError } from "./common";
 
-const phone = z.string().transform((v, ctx) => toE164(v) ?? (ctx.addIssue({ code: "custom", message: "Enter a valid phone number" }), z.NEVER));
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM");
 const hours = z.object(Object.fromEntries(DAYS.map((d) => [d, z.object({ open: hhmm, close: hhmm }).nullable().optional()])));
 const STAGES = ["NEW", "ENGAGED", "QUALIFIED", "SCHEDULED", "WON", "LOST"] as const;
 const OPEN_STAGES = ["NEW", "ENGAGED", "QUALIFIED", "SCHEDULED"] as const;
 
-function safe(b: Business) {
-  const { passwordHash: _p, ...rest } = b;
-  return rest;
-}
-
-async function me(res: { locals: Record<string, unknown> }): Promise<Business> {
-  const b = await db.business.findUnique({ where: { id: res.locals.businessId as string } });
+async function me(res: Parameters<typeof tenant>[0]): Promise<Business> {
+  const b = await db.business.findUnique({ where: { id: tenant(res) } });
   if (!b) throw new HttpError(401, "Account not found");
   return b;
 }
@@ -49,58 +46,54 @@ async function myLead(businessId: string, id: string) {
 export function apiRoutes(deps: Deps): Router {
   const r = Router();
   r.use(json({ limit: "100kb" }));
-  const authLimit = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false });
+  r.use("/auth", authRoutes(deps));
 
-  r.post("/auth/signup", authLimit, async (req, res) => {
-    const body = z
-      .object({
-        businessName: z.string().trim().min(2).max(80),
-        ownerName: z.string().trim().min(1).max(60),
-        email: z.string().trim().toLowerCase().email(),
-        password: z.string().min(8).max(200),
-        ownerPhone: phone,
-        timezone: z.string().refine(validTimeZone, "Unknown timezone").default("America/New_York"),
-      })
-      .parse(req.body);
-    if (await db.business.findUnique({ where: { email: body.email } })) throw new HttpError(409, "That email already has an account");
-    const b = await db.business.create({
-      data: {
-        name: body.businessName, ownerName: body.ownerName, email: body.email, passwordHash: await bcrypt.hash(body.password, 10),
-        ownerPhone: body.ownerPhone, timezone: body.timezone, hours: DEFAULT_HOURS, missedText: DEFAULT_MISSED_TEXT, afterHoursText: DEFAULT_AFTER_HOURS_TEXT,
-      },
-    });
-    res.status(201).json({ token: issueToken(b.id), business: safe(b) });
+  r.use(requireUser);
+
+  // Who am I — works for platform admins and tenant users alike.
+  r.get("/session", async (_req, res) => {
+    const s = session(res);
+    const user = await db.user.findUniqueOrThrow({ where: { id: s.userId }, select: { id: true, name: true, email: true, role: true, phone: true, getsAlerts: true } });
+    res.json({ user, businessId: s.businessId, viewAs: s.viewAs });
   });
 
-  r.post("/auth/login", authLimit, async (req, res) => {
-    const { email, password } = z.object({ email: z.string().trim().toLowerCase(), password: z.string() }).parse(req.body);
-    const b = await db.business.findUnique({ where: { email } });
-    if (!b || !(await bcrypt.compare(password, b.passwordHash))) throw new HttpError(401, "Wrong email or password");
-    res.json({ token: issueToken(b.id), business: safe(b) });
-  });
+  r.use("/platform", platformRoutes(deps));
 
-  r.use(requireOwner);
+  r.use(requireTenant, blockWritesWhenReadOnly);
+  r.use(teamRoutes(deps));
 
   r.get("/me", async (_req, res) => {
     const b = await me(res);
-    const [selfTest, customerCall] = await Promise.all([
-      db.call.findFirst({ where: { businessId: b.id, state: { in: ["SELF_TEST", "ENDED"] }, fromNumber: b.ownerPhone }, select: { id: true } }),
-      db.call.findFirst({ where: { businessId: b.id, fromNumber: { not: b.ownerPhone } }, select: { id: true } }),
+    const s = session(res);
+    const teamPhones = (await db.user.findMany({ where: { businessId: b.id, phone: { not: null } }, select: { phone: true } })).map((u) => u.phone!);
+    const ours = [...new Set([b.ownerPhone, ...teamPhones])];
+    const [selfTest, customerCall, texts, seats, user] = await Promise.all([
+      db.call.findFirst({ where: { businessId: b.id, state: { in: ["SELF_TEST", "ENDED"] }, fromNumber: { in: ours } }, select: { id: true } }),
+      db.call.findFirst({ where: { businessId: b.id, fromNumber: { notIn: ours } }, select: { id: true } }),
+      textUsage(b, deps.now()),
+      seatUsage(b.id, deps.now()),
+      db.user.findUniqueOrThrow({ where: { id: s.userId }, select: { id: true, name: true, email: true, role: true, phone: true, getsAlerts: true } }),
     ]);
     res.json({
-      business: safe(b),
+      business: b,
+      user,
+      role: s.viewAs ? "OWNER" : s.role,
+      viewAs: s.viewAs,
+      plan: { ...PLANS[b.plan], id: b.plan, texts, seats: { used: seats.used, limit: PLANS[b.plan].seats } },
       setup: { hasNumber: Boolean(b.phoneNumber), selfTested: Boolean(selfTest), firstCustomerCall: Boolean(customerCall) },
       provider: { name: deps.provider.name, live: deps.provider.name !== "fake", webhookUrl: `${config.publicUrl}/webhooks/${deps.provider.name}` },
     });
   });
 
-  r.patch("/settings", async (req, res) => {
+  r.patch("/settings", allow("OWNER", "ADMIN"), async (req, res) => {
     const body = z
       .object({
         name: z.string().trim().min(2).max(80),
         ownerName: z.string().trim().min(1).max(60),
         ownerPhone: phone,
-        phoneNumber: phone.nullable(),
+        // No phoneNumber here: typing one in would let a business claim a
+        // number it doesn't own and receive its calls. Numbers come from
+        // /numbers/buy, or a platform admin assigns one.
         timezone: z.string().refine(validTimeZone, "Unknown timezone"),
         callMode: z.enum(["RING_OWNER", "FORWARDED"]),
         ringSeconds: z.number().int().min(10).max(45),
@@ -125,26 +118,28 @@ export function apiRoutes(deps: Deps): Router {
         where: { id: tenant(res) },
         data: { ...rest, ...(avgJob !== undefined ? { avgJobCents: Math.round(avgJob * 100) } : {}) },
       });
-      res.json({ business: safe(b) });
+      await audit(session(res), b.id, "settings_updated", null, { fields: Object.keys(body) });
+      res.json({ business: b });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") throw new HttpError(409, "That number is already connected to another account");
       throw err;
     }
   });
 
-  r.get("/numbers/search", async (req, res) => {
+  r.get("/numbers/search", allow("OWNER", "ADMIN"), async (req, res) => {
     const areaCode = z.string().regex(/^\d{3}$/, "Area code must be 3 digits").parse(req.query.areaCode);
     res.json({ numbers: await deps.provider.searchNumbers(areaCode) });
   });
 
-  r.post("/numbers/buy", async (req, res) => {
+  r.post("/numbers/buy", allow("OWNER", "ADMIN"), async (req, res) => {
     const { phoneNumber } = z.object({ phoneNumber: phone }).parse(req.body);
     const b = await me(res);
     if (b.phoneNumber) throw new HttpError(409, "This account already has a number");
     if (await db.business.findUnique({ where: { phoneNumber } })) throw new HttpError(409, "That number is taken");
-    await deps.provider.buyNumber(phoneNumber);
+    await deps.provider.buyNumber(phoneNumber, { messagingProfileId: b.messagingProfileId });
     const updated = await db.business.update({ where: { id: b.id }, data: { phoneNumber } });
-    res.status(201).json({ business: safe(updated) });
+    await audit(session(res), b.id, "number_purchased", phoneNumber);
+    res.status(201).json({ business: updated });
   });
 
   r.get("/dashboard", async (req, res) => {
@@ -223,7 +218,15 @@ export function apiRoutes(deps: Deps): Router {
       await cancelJobs(lead.id, ["NUDGE"]);
     }
     if (body.stage === "WON" || body.stage === "LOST") await cancelJobs(lead.id, ["REMINDER"]);
-    res.json({ lead: await db.lead.update({ where: { id: lead.id }, data }) });
+    const updated = await db.lead.update({ where: { id: lead.id }, data });
+    // Stage and job value are what money is reported on — record who set them.
+    if ((body.stage && body.stage !== lead.stage) || (value !== undefined && data.valueCents !== lead.valueCents)) {
+      await audit(session(res), lead.businessId, "lead_updated", `#${lead.code}`, {
+        ...(body.stage && body.stage !== lead.stage ? { stage: [lead.stage, body.stage] } : {}),
+        ...(value !== undefined ? { valueCents: [lead.valueCents, updated.valueCents] } : {}),
+      });
+    }
+    res.json({ lead: updated });
   });
 
   r.post("/leads/:id/messages", async (req, res) => {
@@ -233,9 +236,9 @@ export function apiRoutes(deps: Deps): Router {
     await cancelJobs(lead.id, ["NUDGE"]);
     await db.lead.update({ where: { id: lead.id }, data: { intakeStep: 0, ...(lead.stage === "NEW" ? { stage: "ENGAGED" as const } : {}) } });
     try {
-      res.status(201).json({ message: await textLead(deps, b, lead, body, "OWNER", { template: false }) });
+      res.status(201).json({ message: await textLead(deps, b, lead, body, "OWNER", { template: false, sentBy: session(res).name }) });
     } catch (err) {
-      if (err instanceof OptedOutError || err instanceof NoNumberError) throw new HttpError(409, err.message);
+      if (err instanceof OptedOutError || err instanceof NoNumberError || err instanceof SuspendedError) throw new HttpError(409, err.message);
       throw new HttpError(502, `The text didn't send: ${err instanceof Error ? err.message : "unknown error"}`);
     }
   });

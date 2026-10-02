@@ -32,7 +32,53 @@ caller ─► TradeCall number ─► rings owner's cell ("press 1 to take it")
 | **Dashboard** | Missed calls, why they were missed, reply rate, estimated jobs saved, revenue won, daily chart, lead stages, urgent queue. |
 | **Inbox** | Lead list and conversation side by side, stages, job value, appointment booking, call/voicemail timeline. |
 | **Weekly digest** | Monday 8am in each business's own timezone, by SMS (+ email via Resend). |
-| **Multi-business** | Each business only sees its own data. Webhooks find the business from the number dialled. |
+| **Multi-tenant SaaS** | Many businesses on one install, each fully separate, with teams, roles, plans and a platform console for you. See below. |
+
+## Multi-tenant: businesses, teams and the platform console
+
+TradeCall is built to be run by **you** for **many businesses**.
+
+**Inside each business (tenant)**
+
+| Role | Can do |
+|---|---|
+| Owner | Everything, including adding/removing other owners |
+| Admin | Settings, phone number, team (except owners), activity log |
+| Member | Inbox only: read, reply, update leads, book appointments |
+
+- **Invites:** owners and admins invite by email. The link is also shown so it can be texted. It's single-use, expires in 7 days, and only a hash of it is stored.
+- **Alerts go to the whole team:** everyone with alerts on gets new-lead and voicemail texts. Any of them can reply to an alert (or send `#12 message`) to text that customer, and the inbox shows who sent each reply.
+- **Seats and texts are capped by plan:** Starter (2 seats, 500 texts/month), Pro (5 / 2,000), Team (20 / 6,000), defined in `src/lib/plans.ts`. Texts over the allowance still go out and show as overage, so a busy week never stops a customer getting their reply.
+- **Activity log:** sign-ins, invites, role changes, settings, number purchases, and lead stage/value changes, plus anything TradeCall staff do to the account.
+- A business always keeps at least one active owner. Role changes and removals take effect on the very next request.
+
+**Platform console (you)**
+
+Create your login. There is deliberately no public signup for this role:
+
+```bash
+npm run platform:admin -- you@yourcompany.com "Your Name"   # prints a one-time password
+```
+
+Signing in as a platform admin opens a separate, indigo-themed console (so it's never confused with a customer's view):
+
+- **Businesses:** every tenant with plan, status, seats, texts this month, missed calls and last activity, plus platform-wide totals.
+- **Suspend / reactivate**, with a reason that's shown to the business:
+  - While suspended, their calls aren't answered and no texts go out.
+  - They can sign in and look, but can't change anything.
+  - STOP replies are still recorded.
+  - Scheduled follow-ups and reminders wait, and resume on reactivation.
+- **Change plan, assign a number** already in your Telnyx account, and set the business's own **Telnyx messaging profile**.
+- **Read-only support view:** see exactly what the business sees, for one hour. It can't change anything, and it's recorded in that business's own activity log.
+
+**10DLC per business.** US carriers register each business as its own brand and campaign. Register them in Telnyx (as a platform/ISV), then paste that business's messaging profile id in the console. Until then, texts use the platform default profile (`TELNYX_MESSAGING_PROFILE_ID`).
+
+**How tenants are kept separate**
+
+- The signed-in user's business is re-read from the database on every request. Business routes only ever use that value, never an id from the request. Another business's lead, call, voicemail, user or invite is simply "not found".
+- Webhooks have no login, so they find the business from the number that was called or texted. Numbers are unique, and businesses can't type in a number they don't own: they buy one through TradeCall, or you assign it.
+- The database itself enforces that platform admins belong to no business and every other user belongs to exactly one.
+- Tests cover cross-business access for every kind of record, and an independent review of every route found no leaks.
 
 ## Architecture
 
@@ -61,9 +107,11 @@ see the go-live checklist below.
 cp .env.example .env        # set JWT_SECRET
 npm install
 npx prisma migrate deploy
-npm run db:seed             # demo@tradecall.test / demo-password
+npm run db:seed
 npm run dev                 # http://localhost:4100
 ```
+
+Demo logins: `demo@tradecall.test` / `demo-password` (business owner), `jo@tradecall.test` / `demo-password` (admin on the same team), `admin@tradecall.test` / `admin-password` (platform console). The seed also creates two more businesses, one of them suspended.
 
 In demo mode, `/webhooks/fake` accepts unsigned, normalized events, so you can
 simulate a call:
@@ -79,7 +127,7 @@ curl -X POST $W -H "$H" -d '{"eventId":"3","type":"sms.received","providerId":"m
 
 ```bash
 npm run test:setup   # migrate the test DB (TEST_DATABASE_URL, default tradecall_test)
-npm test             # 71 tests against real Postgres
+npm test             # 94 tests against real Postgres
 npm run typecheck
 ```
 
@@ -119,7 +167,9 @@ npm run typecheck
 
 ## Known limits
 
-- One login per business (no team accounts yet), and no billing.
+- No payment collection yet. Plans and usage are tracked (texts this month, overage, seats), so Stripe subscriptions plus metered overage can be added on top.
+- One email = one account = one business. Someone working for two businesses needs two emails.
+- Tenant separation is enforced in the application and by tests, not by Postgres row-level security. RLS would be a sensible extra layer before handling very large numbers of tenants.
 - Intake questions are the same for every trade.
 - "Jobs saved" is callers who replied × your average job value. It's an
   estimate and is labelled that way. "Revenue won" is only what you record.

@@ -1,6 +1,9 @@
 // Demo data — three weeks of a plumbing business, so the dashboard and
 // inbox can be explored without a phone provider.
-//   npm run db:seed  →  demo@tradecall.test / demo-password
+//   npm run db:seed
+//     owner:          demo@tradecall.test  / demo-password
+//     team member:    jo@tradecall.test    / demo-password
+//     platform admin: admin@tradecall.test / admin-password
 // All phone numbers are fictional 512-555 numbers.
 
 import bcrypt from "bcryptjs";
@@ -25,14 +28,47 @@ const STREETS = ["Elm St", "Oak Ave", "Burnet Rd", "Lamar Blvd", "Manor Rd", "Ri
 const NAMES = ["Maria", "James", "Priya", "Tom", "Keisha", "Luis", "Ann", null, null, null];
 
 async function main() {
-  await db.business.deleteMany({ where: { email: "demo@tradecall.test" } });
+  await db.business.deleteMany({ where: { email: { in: ["demo@tradecall.test", "hello@coolair.test", "ops@brightspark.test"] } } });
+  await db.user.deleteMany({ where: { email: "admin@tradecall.test" } });
+  const pw = await bcrypt.hash("demo-password", 10);
   const b = await db.business.create({
     data: {
-      name: "Lone Star Plumbing", ownerName: "Mike", email: "demo@tradecall.test", passwordHash: await bcrypt.hash("demo-password", 10),
+      name: "Lone Star Plumbing", ownerName: "Mike", email: "demo@tradecall.test", plan: "PRO",
       ownerPhone: "+15125550100", phoneNumber: "+15125550199", timezone: TZ, hours: DEFAULT_HOURS,
       missedText: DEFAULT_MISSED_TEXT, afterHoursText: DEFAULT_AFTER_HOURS_TEXT, avgJobCents: 52000,
     },
   });
+  const mike = await db.user.create({ data: { businessId: b.id, email: "demo@tradecall.test", passwordHash: pw, name: "Mike", role: "OWNER", phone: "+15125550100", getsAlerts: true, lastLoginAt: new Date() } });
+  await db.user.create({ data: { businessId: b.id, email: "jo@tradecall.test", passwordHash: pw, name: "Jo (office)", role: "ADMIN", phone: "+15125550111", getsAlerts: true, lastLoginAt: new Date(Date.now() - 3 * 36e5) } });
+  await db.user.create({ data: { businessId: b.id, email: "luis@tradecall.test", passwordHash: pw, name: "Luis", role: "MEMBER", phone: "+15125550112", getsAlerts: false, lastLoginAt: new Date(Date.now() - 2 * 864e5) } });
+  const log = (action: string, target: string | null, ago: number, actor = "Mike", kind: "USER" | "PLATFORM" = "USER", businessId = b.id) =>
+    db.auditLog.create({ data: { businessId, actorId: kind === "USER" ? mike.id : null, actorName: actor, actorKind: kind, action, target, createdAt: new Date(Date.now() - ago) } });
+  await log("tenant_created", "Lone Star Plumbing", 30 * 864e5);
+  await log("number_purchased", "+15125550199", 30 * 864e5 - 6e5);
+  await log("invite_sent", "jo@tradecall.test", 29 * 864e5);
+  await log("invite_accepted", "jo@tradecall.test", 29 * 864e5 - 36e5, "Jo (office)");
+  await log("tenant_updated", "Lone Star Plumbing", 20 * 864e5, "Pat (TradeCall)", "PLATFORM");
+  await log("settings_updated", null, 2 * 864e5);
+
+  // Two more businesses so the platform console has something to show.
+  const cool = await db.business.create({
+    data: { name: "Cool Air HVAC", ownerName: "Sam", email: "hello@coolair.test", ownerPhone: "+15125550200", phoneNumber: "+15125550299", timezone: TZ, hours: DEFAULT_HOURS, missedText: DEFAULT_MISSED_TEXT, afterHoursText: DEFAULT_AFTER_HOURS_TEXT },
+  });
+  await db.user.create({ data: { businessId: cool.id, email: "hello@coolair.test", passwordHash: pw, name: "Sam", role: "OWNER", phone: "+15125550200", getsAlerts: true } });
+  const spark = await db.business.create({
+    data: { name: "Bright Spark Electric", ownerName: "Ana", email: "ops@brightspark.test", ownerPhone: "+15125550300", phoneNumber: "+15125550399", plan: "TEAM", status: "SUSPENDED", suspendedReason: "Payment failed 3 times", timezone: TZ, hours: DEFAULT_HOURS, missedText: DEFAULT_MISSED_TEXT, afterHoursText: DEFAULT_AFTER_HOURS_TEXT },
+  });
+  await db.user.create({ data: { businessId: spark.id, email: "ops@brightspark.test", passwordHash: pw, name: "Ana", role: "OWNER", phone: "+15125550300", getsAlerts: true } });
+  await log("tenant_suspended", "Bright Spark Electric", 4 * 864e5, "Pat (TradeCall)", "PLATFORM", spark.id);
+  for (let i = 0; i < 9; i++) {
+    const at = new Date(Date.now() - i * 2.6 * 36e5 - 36e5);
+    const from = `+1512555${7000 + i}`;
+    const lead = await db.lead.create({ data: { businessId: cool.id, code: i + 1, phone: from, createdAt: at } });
+    await db.call.create({ data: { businessId: cool.id, callerLegId: `seed-cool-${i}`, fromNumber: from, state: "ENDED", outcome: "MISSED", missReason: "NO_ANSWER", startedAt: at, leadId: lead.id } });
+    await db.message.create({ data: { businessId: cool.id, leadId: lead.id, direction: "OUT", kind: "AUTO_REPLY", body: "Hi, it's Cool Air HVAC…", status: "delivered", createdAt: at } });
+  }
+  await db.business.update({ where: { id: cool.id }, data: { leadSeq: 9 } });
+  await db.user.create({ data: { businessId: null, email: "admin@tradecall.test", passwordHash: await bcrypt.hash("admin-password", 10), name: "Pat (TradeCall)", role: "PLATFORM_ADMIN" } });
   const v = { business: b.name, owner: b.ownerName, number: "(512) 555-0199" };
   const now = Date.now();
   let caller = 0, code = 0;
@@ -88,6 +124,7 @@ async function main() {
     }
   }
   await db.business.update({ where: { id: b.id }, data: { leadSeq: code } });
-  console.log(`Seeded ${b.name}: ${caller} calls, ${code} leads. Sign in: demo@tradecall.test / demo-password`);
+  console.log(`Seeded ${b.name}: ${caller} calls, ${code} leads, 3 team members; plus Cool Air HVAC and Bright Spark Electric (suspended).`);
+  console.log("Sign in: demo@tradecall.test / demo-password (owner) · admin@tradecall.test / admin-password (platform console)");
 }
 main().finally(() => db.$disconnect());
