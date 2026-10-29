@@ -95,6 +95,12 @@ export function platformRoutes(deps: Deps): Router {
       .parse(req.body);
     // Staff are trusted, so saying "already has an account" here is fine.
     if (await db.user.findUnique({ where: { email: body.ownerEmail } })) throw new HttpError(409, "That email already has a TradeCall account");
+    // Stops a double-click (or a forgotten earlier attempt) creating a second copy of the same business.
+    const waiting = await db.invite.findFirst({
+      where: { email: body.ownerEmail, acceptedAt: null, revokedAt: null, expiresAt: { gt: deps.now() } },
+      include: { business: { select: { name: true } } },
+    });
+    if (waiting) throw new HttpError(409, `${body.ownerEmail} already has an invite waiting for ${waiting.business.name}. Re-send it from that business's page instead.`);
     const b = await db.business.create({
       data: {
         name: body.businessName, ownerName: body.ownerName, email: body.ownerEmail, ownerPhone: body.ownerPhone, timezone: body.timezone, plan: body.plan,
@@ -168,6 +174,33 @@ export function platformRoutes(deps: Deps): Router {
     }
     await audit(session(res), b.id, "tenant_updated", b.name, { before: { name: b.name, email: b.email, plan: b.plan, messagingProfileId: b.messagingProfileId, phoneNumber: b.phoneNumber }, after: body });
     res.json({ tenant: updated });
+  });
+
+  // Permanently delete a business and everything in it (calls, leads,
+  // messages, voicemails, users, invites, its activity log). Guard rails:
+  // it must already be suspended (the reversible step), and the caller
+  // must type the exact business name. A platform-level record survives.
+  r.delete("/tenants/:id", async (req, res) => {
+    const { confirmName } = z.object({ confirmName: z.string() }).parse(req.body ?? {});
+    const b = await findTenant(req.params.id);
+    if (b.status !== "SUSPENDED") throw new HttpError(409, "Suspend the business first — deleting is only possible once service is off");
+    if (confirmName.trim() !== b.name) throw new HttpError(400, "Type the business name exactly to confirm");
+
+    const where = { businessId: b.id };
+    const [users, leads, calls, messages, voicemails] = await Promise.all([
+      db.user.count({ where }), db.lead.count({ where }), db.call.count({ where }), db.message.count({ where }), db.voicemail.count({ where }),
+    ]);
+    // Every tenant table cascades from Business, so this removes it all in one statement.
+    await db.business.delete({ where: { id: b.id } });
+    await audit(session(res), null, "tenant_deleted", b.name, {
+      businessId: b.id, phoneNumber: b.phoneNumber, plan: b.plan, deleted: { users, leads, calls, messages, voicemails },
+    });
+    res.json({
+      ok: true,
+      deleted: { users, leads, calls, messages, voicemails },
+      // The number itself still sits in the platform's Telnyx account (and keeps costing money) until released there.
+      releaseNumber: b.phoneNumber,
+    });
   });
 
   // Invite (or re-invite) a user into this business, e.g. an owner who lost their link.

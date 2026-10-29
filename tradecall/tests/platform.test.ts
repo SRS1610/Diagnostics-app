@@ -190,3 +190,76 @@ describe("creating and managing businesses from the console", () => {
     await h.as(p).post(`/platform/tenants/${tenant.id}/invites`, { email: "third@example.com", role: "MEMBER" }).expect(409);
   });
 });
+
+describe("deleting a business", () => {
+  async function busyBusiness() {
+    const b = await business({ name: "Rapid Rooter" });
+    await user(b, "MEMBER", { phone: "+15550103001" });
+    await missedCall(h);
+    await h.sms("Leaking pipe");
+    const { sessionId } = await (async () => {
+      const call = await db.call.findFirstOrThrow();
+      return { sessionId: call.sessionId };
+    })();
+    await h.event({ type: "call.recording_ready", sessionId, legId: null, url: "u" } as never);
+    await h.api(b).post("/team/invites", { email: "pending@example.com", role: "MEMBER" });
+    return b;
+  }
+
+  it("only deletes a suspended business, and only when its name is typed exactly", async () => {
+    const b = await busyBusiness();
+    const p = await admin();
+    expect((await h.as(p).del(`/platform/tenants/${b.id}`, { confirmName: "Rapid Rooter" }).expect(409)).body.error).toContain("Suspend");
+    await h.as(p).post(`/platform/tenants/${b.id}/suspend`, { reason: "Closing account" }).expect(200);
+    await h.as(p).del(`/platform/tenants/${b.id}`, { confirmName: "rapid rooter" }).expect(400);
+    await h.as(p).del(`/platform/tenants/${b.id}`, {}).expect(400);
+    expect(await db.business.count({ where: { id: b.id } })).toBe(1);
+  });
+
+  it("erases everything in that business, leaves other businesses alone, and keeps a platform record", async () => {
+    const b = await busyBusiness();
+    const other = await business({ name: "Cool Air", phoneNumber: "+15550108888", ownerPhone: "+15550100002" });
+    await missedCall(h, "+15550104444", "+15550108888");
+    const ownerToken = (await import("../src/lib/auth")).issueToken(await db.user.findFirstOrThrow({ where: { businessId: b.id, role: "OWNER" } }));
+    const p = await admin();
+    await h.as(p).post(`/platform/tenants/${b.id}/suspend`, { reason: "Customer asked to close account" }).expect(200);
+
+    const res = (await h.as(p).del(`/platform/tenants/${b.id}`, { confirmName: "Rapid Rooter" }).expect(200)).body;
+    expect(res).toMatchObject({ ok: true, releaseNumber: NUMBER, deleted: { users: 2, leads: 1, calls: 1, voicemails: 1 } });
+
+    const where = { businessId: b.id };
+    const left = await Promise.all([
+      db.business.count({ where: { id: b.id } }), db.user.count({ where }), db.invite.count({ where }), db.lead.count({ where }), db.call.count({ where }),
+      db.message.count({ where }), db.voicemail.count({ where }), db.job.count({ where }), db.optOut.count({ where }), db.auditLog.count({ where }),
+    ]);
+    expect(left).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+    // their logins stop working immediately
+    await h.as(ownerToken).get("/me").expect(401);
+    // the other business is untouched
+    expect(await db.lead.count({ where: { businessId: other.id } })).toBe(1);
+    // calls to the old number are no longer anyone's
+    await h.event({ type: "call.incoming", legId: "after", sessionId: "x", from: CALLER, to: NUMBER } as never);
+    expect(h.fake.last("hangup")).toMatchObject({ legId: "after" });
+    // a record of the deletion survives at platform level, without customer data
+    const record = (await h.as(p).get("/platform/activity")).body.entries.find((e: { action: string }) => e.action === "tenant_deleted");
+    expect(record).toMatchObject({ target: "Rapid Rooter", businessName: null, actorName: "Pat (support)" });
+    expect(JSON.stringify(record)).not.toContain("Leaking pipe");
+  });
+
+  it("is for platform admins only", async () => {
+    const b = await business();
+    await db.business.update({ where: { id: b.id }, data: { status: "SUSPENDED" } });
+    await h.api(b).del(`/platform/tenants/${b.id}`, { confirmName: "Rapid Rooter" }).expect(403);
+  });
+});
+
+it("won't create a second business for an owner whose invite is still waiting", async () => {
+  await reset();
+  const p = await admin();
+  const body = { businessName: "Peak Roofing", ownerName: "Ray", ownerEmail: "ray@example.com", ownerPhone: "5550106000" };
+  await h.as(p).post("/platform/tenants", body).expect(201);
+  const again = await h.as(p).post("/platform/tenants", body).expect(409);
+  expect(again.body.error).toContain("already has an invite waiting for Peak Roofing");
+  expect(await db.business.count()).toBe(1);
+});

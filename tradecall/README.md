@@ -65,11 +65,17 @@ Signing in as a platform admin opens a separate, indigo-themed console (so it's 
 - **Businesses:** every tenant with plan, status, seats, texts this month, missed calls and last activity, plus platform-wide totals.
 - **New business:** create an account for a customer (name, plan, owner, timezone). The owner gets an invite to set their own password, so staff never choose or see it. Businesses can also still sign up themselves.
 - **Users and invites per business:** see who's joined, invite or re-invite someone (e.g. an owner who lost their link), and cancel pending invites. Edit the business name and contact email.
+- **Suspend / Reactivate / Delete buttons** on every row of the Businesses list and on each business's page, each behind a confirmation dialog.
 - **Suspend / reactivate**, with a reason that's shown to the business:
   - While suspended, their calls aren't answered and no texts go out.
   - They can sign in and look, but can't change anything.
   - STOP replies are still recorded.
   - Scheduled follow-ups and reminders wait, and resume on reactivation.
+- **Delete permanently:** only possible once a business is suspended (so there's always a reversible step first), and you must type its exact name to confirm.
+  - Erases its calls, customers, messages, voicemails, logins, invites and activity log. Other businesses are untouched.
+  - A record of the deletion (who, when, how much was removed, which number) stays in the platform activity log, with no customer data.
+  - The phone number stays in your Telnyx account, still billed, until you release it there; the console reminds you.
+  - This is also how to honour a customer's request to have their data deleted (GDPR/CCPA-style).
 - **Change plan, assign a number** already in your Telnyx account, and set the business's own **Telnyx messaging profile**.
 - **Read-only support view:** see exactly what the business sees, for one hour. It can't change anything, and it's recorded in that business's own activity log.
 
@@ -129,7 +135,7 @@ curl -X POST $W -H "$H" -d '{"eventId":"3","type":"sms.received","providerId":"m
 
 ```bash
 npm run test:setup   # migrate the test DB (TEST_DATABASE_URL, default tradecall_test)
-npm test             # 98 tests against real Postgres
+npm test             # 102 tests against real Postgres
 npm run typecheck
 ```
 

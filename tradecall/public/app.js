@@ -635,9 +635,17 @@ const ACTION = {
   settings_updated: "changed settings", number_purchased: "connected number", lead_updated: "updated lead",
   tenant_suspended: "suspended the account", tenant_reactivated: "reactivated the account", tenant_updated: "changed plan/settings for",
   support_view_opened: "opened a read-only support view of",
+  tenant_deleted: "permanently deleted",
 };
+function describeDeletion(d) {
+  const n = d.deleted || {};
+  const part = (k, one, many) => `${n[k] ?? 0} ${(n[k] ?? 0) === 1 ? one : many}`;
+  return `Removed ${[part("users", "login", "logins"), part("leads", "customer", "customers"), part("calls", "call", "calls"), part("messages", "message", "messages"), part("voicemails", "voicemail", "voicemails")].join(", ")}`
+    + (d.phoneNumber ? ` · number ${phone(d.phoneNumber)} to release in Telnyx` : "");
+}
+
 function activityRow(e, withBusiness = false) {
-  const details = e.details ? Object.entries(e.details).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.map((x) => x ?? "—").join(" → ") : typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ") : "";
+  const details = e.action === "tenant_deleted" && e.details ? describeDeletion(e.details) : e.details ? Object.entries(e.details).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.map((x) => x ?? "—").join(" → ") : typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ") : "";
   return `<tr><td class="muted small">${new Date(e.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td>
     ${withBusiness ? `<td>${esc(e.businessName || "—")}</td>` : ""}
     <td class="wrap"><b>${esc(e.actorName)}</b>${e.actorKind === "PLATFORM" ? ` <span class="tag">TradeCall staff</span>` : ""} ${esc(ACTION[e.action] || e.action)} ${esc(e.target || "")}
@@ -793,18 +801,23 @@ async function renderPlatform() {
         <input id="pq" placeholder="Search name, email or number" value="${esc(PQ)}" style="max-width:320px">
         <div class="chips">${[["", "All"], ["ACTIVE", "Active"], ["SUSPENDED", "Suspended"]].map(([v, l]) => `<button class="chip" data-st="${v}" aria-pressed="${v === PSTATUS}">${l}</button>`).join("")}</div>
       </div>
-      <div class="tbl-wrap"><table class="list">
-        <thead><tr><th>Business</th><th>Status</th><th>Plan</th><th>Number</th><th>Users</th><th>Texts (month)</th><th>Missed 30d</th><th>Last call</th></tr></thead>
+      <div class="tbl-wrap"><table class="list tight">
+        <thead><tr><th>Business</th><th>Status</th><th>Plan</th><th>Number</th><th>Users</th><th>Texts (month)</th><th>Missed 30d</th><th>Last call</th><th></th></tr></thead>
         <tbody>${tenants.map((t) => `<tr class="link" data-t="${esc(t.id)}">
-          <td><b>${esc(t.name)}</b><div class="muted small">${esc(t.email)}</div></td>
+          <td class="wrap" style="min-width:150px"><b>${esc(t.name)}</b><div class="muted small">${esc(t.email)}</div></td>
           <td><span class="tag ${t.status}">${t.status === "ACTIVE" ? "Active" : "Suspended"}</span></td>
           <td>${PLAN[t.plan]}</td><td class="num">${esc(t.phoneNumber ? phone(t.phoneNumber) : "—")}</td>
           <td class="num">${t.activeUsers}/${t.seats}</td>
           <td class="num">${t.textsThisMonth.toLocaleString()}<span class="muted small"> / ${t.includedTexts.toLocaleString()}</span>${t.textsThisMonth > t.includedTexts ? ' <span class="tag NEW">over</span>' : ""}</td>
-          <td class="num">${t.missedCalls30d}</td><td class="muted small">${t.lastCallAt ? agoText(t.lastCallAt) : "—"}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">No businesses match.</td></tr>`}</tbody>
+          <td class="num">${t.missedCalls30d}</td><td class="muted small">${t.lastCallAt ? agoText(t.lastCallAt) : "—"}</td>
+          <td><div class="row" style="flex-wrap:nowrap">${tenantActions(t)}</div></td></tr>`).join("") || `<tr><td colspan="9" class="muted">No businesses match.</td></tr>`}</tbody>
       </table></div>
     </section>`;
-  view.querySelectorAll("[data-t]").forEach((r) => r.addEventListener("click", () => (location.hash = `#/platform/${r.dataset.t}`)));
+  view.querySelectorAll("[data-t]").forEach((r) => r.addEventListener("click", (e) => {
+    if (e.target.closest("button")) return; // action buttons don't open the page
+    location.hash = `#/platform/${r.dataset.t}`;
+  }));
+  bindTenantActions(tenants, renderPlatform);
   view.querySelectorAll("[data-st]").forEach((b) => b.addEventListener("click", () => { PSTATUS = b.dataset.st; renderPlatform(); }));
   const q = $("#pq");
   q.addEventListener("input", () => {
@@ -847,10 +860,12 @@ async function renderTenant(id) {
           </div>
           <button class="btn alt">Save account changes</button>
         </form>
-        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
-          ${t.status === "ACTIVE"
-            ? `<form id="suspend" class="row" style="align-items:flex-end"><label style="flex:1;min-width:220px;margin:0">Reason (shown to the business)<input name="reason" required minlength="3" maxlength="300"></label><button class="btn danger">Suspend service</button></form>`
-            : `<button class="btn" id="reactivate">Reactivate service</button>`}
+        <div class="danger-zone">
+          <h2>Service</h2>
+          <p class="small muted" style="margin:0 0 10px">${t.status === "ACTIVE"
+            ? "Suspending stops their calls and texts straight away and makes the account read-only. It can be undone."
+            : "Service is off. Reactivate to resume calls, texts and scheduled reminders — or delete the business for good."}</p>
+          <div class="row">${tenantActions(t, true)}</div>
         </div>
       </section>
       <section class="panel"><h2>Users</h2>
@@ -880,14 +895,7 @@ async function renderTenant(id) {
       renderTenant(t.id);
     } catch (e) { toast(e.message); }
   });
-  $("#suspend")?.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    if (!confirm(`Suspend ${t.name}? Their calls won't be answered and no texts will go out until you reactivate.`)) return;
-    try { await api(`/platform/tenants/${t.id}/suspend`, { method: "POST", body: { reason: ev.target.reason.value } }); renderTenant(t.id); } catch (e) { toast(e.message); }
-  });
-  $("#reactivate")?.addEventListener("click", async () => {
-    try { await api(`/platform/tenants/${t.id}/reactivate`, { method: "POST" }); renderTenant(t.id); } catch (e) { toast(e.message); }
-  });
+  bindTenantActions([t], () => renderTenant(t.id), () => (location.hash = "#/platform"));
   view.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", async () => {
     try { await api(`/platform/tenants/${t.id}/invites/${b.dataset.cancel}`, { method: "DELETE" }); renderTenant(t.id); } catch (e) { toast(e.message); }
   }));
@@ -967,5 +975,93 @@ async function renderNewTenant() {
       $("#nerr").textContent = e.message;
       btn.disabled = false;
     }
+  });
+}
+
+
+// ---------------- suspend / reactivate / delete ----------------
+
+// Buttons for one business. Delete only appears once it's suspended, so
+// there's always a reversible step (and a cooling-off) before data is gone.
+function tenantActions(t, large = false) {
+  const cls = large ? "btn" : "btn alt compact-btn";
+  if (t.status === "ACTIVE") return `<button class="${cls} danger" data-act="suspend" data-id="${esc(t.id)}">Suspend</button>`;
+  return `<button class="${cls}" data-act="reactivate" data-id="${esc(t.id)}">Reactivate</button>
+    <button class="${cls} danger" data-act="delete" data-id="${esc(t.id)}">Delete${large ? " business" : ""}</button>`;
+}
+
+function bindTenantActions(tenants, refresh, afterDelete = refresh) {
+  view.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const t = tenants.find((x) => x.id === b.dataset.id);
+    if (!t) return;
+    try {
+      if (b.dataset.act === "suspend") {
+        const reason = await dialog({
+          title: `Suspend ${t.name}?`,
+          body: "Their calls won't be answered and no texts will go out. They can still sign in and look, but can't change anything. You can reactivate any time.",
+          input: { label: "Reason (shown to the business)", placeholder: "e.g. Payment failed 3 times", minLength: 3 },
+          confirm: "Suspend service",
+          danger: true,
+        });
+        if (reason == null) return;
+        await api(`/platform/tenants/${t.id}/suspend`, { method: "POST", body: { reason } });
+        toast(`${t.name} suspended`);
+        refresh();
+      } else if (b.dataset.act === "reactivate") {
+        const ok = await dialog({ title: `Reactivate ${t.name}?`, body: "Calls, texts and any held reminders start again straight away.", confirm: "Reactivate" });
+        if (ok == null) return;
+        await api(`/platform/tenants/${t.id}/reactivate`, { method: "POST" });
+        toast(`${t.name} reactivated`);
+        refresh();
+      } else {
+        const typed = await dialog({
+          title: `Delete ${t.name} permanently?`,
+          body: `<p style="margin:0 0 8px">This erases <b>everything</b> in this business and <b>cannot be undone</b>:</p>
+            <ul style="margin:0 0 8px;padding-left:18px"><li>every call, customer, message and voicemail</li><li>all their logins and pending invites</li><li>their activity log</li></ul>
+            <p style="margin:0">A record that it was deleted, and by whom, stays in the platform activity log.${t.phoneNumber ? ` Their number ${esc(phone(t.phoneNumber))} stays in your Telnyx account until you release it there.` : ""}</p>`,
+          html: true,
+          input: { label: `Type ${t.name} to confirm`, mustEqual: t.name },
+          confirm: "Delete forever",
+          danger: true,
+        });
+        if (typed == null) return;
+        const r = await api(`/platform/tenants/${t.id}`, { method: "DELETE", body: { confirmName: typed } });
+        toast(`${t.name} deleted${r.releaseNumber ? ` — release ${phone(r.releaseNumber)} in Telnyx` : ""}`);
+        afterDelete();
+      }
+    } catch (err) {
+      toast(err.message);
+    }
+  }));
+}
+
+// A small modal. Resolves to the input's value (or "" with no input) on
+// confirm, or null on cancel / Escape / clicking outside.
+function dialog({ title, body, html = false, input = null, confirm = "OK", danger = false }) {
+  return new Promise((resolve) => {
+    const wrap = document.createElement("div");
+    wrap.className = "modal-wrap";
+    wrap.innerHTML = `<form class="modal panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h2 id="modal-title">${esc(title)}</h2>
+      <div class="small" style="color:var(--ink-2)">${html ? body : esc(body)}</div>
+      ${input ? `<label style="margin:14px 0 0">${esc(input.label)}<input name="v" autocomplete="off" placeholder="${esc(input.placeholder || "")}"></label>` : ""}
+      <div class="row" style="justify-content:flex-end;margin-top:16px">
+        <button type="button" class="btn alt" data-cancel>Cancel</button>
+        <button class="btn ${danger ? "danger-solid" : ""}" data-ok>${esc(confirm)}</button>
+      </div></form>`;
+    document.body.appendChild(wrap);
+    const form = wrap.querySelector("form"), field = form.querySelector("input"), ok = form.querySelector("[data-ok]");
+    const valid = () => !input || (input.mustEqual != null ? field.value.trim() === input.mustEqual : field.value.trim().length >= (input.minLength || 1));
+    const sync = () => (ok.disabled = !valid());
+    sync();
+    field?.addEventListener("input", sync);
+    const done = (v) => { wrap.remove(); document.removeEventListener("keydown", onKey); resolve(v); };
+    const onKey = (e) => e.key === "Escape" && done(null);
+    document.addEventListener("keydown", onKey);
+    wrap.addEventListener("click", (e) => e.target === wrap && done(null));
+    form.querySelector("[data-cancel]").addEventListener("click", () => done(null));
+    form.addEventListener("submit", (e) => { e.preventDefault(); if (valid()) done(input ? field.value.trim() : ""); });
+    (field || ok).focus();
   });
 }

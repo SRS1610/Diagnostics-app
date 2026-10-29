@@ -199,3 +199,12 @@ select.compact, input.compact { width: auto; padding: 4px 8px; font-size: 13px; 
 
 /* Let wide tables scroll inside their panel instead of widening the page. */
 .grid > *, .panel { min-width: 0; }
+
+/* ---------- confirm dialogs & danger actions ---------- */
+.modal-wrap { position: fixed; inset: 0; background: rgba(10,10,12,.55); display: grid; place-items: center; padding: 16px; z-index: 30; }
+.modal { width: 100%; max-width: 460px; box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.modal h2 { font-size: 17px; }
+.btn.danger-solid { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.compact-btn { padding: 4px 10px; font-size: 13px; }
+.danger-zone { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+table.list.tight td, table.list.tight th { padding: 9px 6px; }

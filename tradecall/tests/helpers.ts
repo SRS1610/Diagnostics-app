@@ -57,7 +57,7 @@ export function harness(provider: Provider = new FakeProvider()) {
         post: (p: string, body?: object) => request(app).post(`/api${p}`).set("authorization", auth).send(body),
         patch: (p: string, body?: object) => request(app).patch(`/api${p}`).set("authorization", auth).send(body),
         put: (p: string, body?: object) => request(app).put(`/api${p}`).set("authorization", auth).send(body),
-        del: (p: string) => request(app).delete(`/api${p}`).set("authorization", auth),
+        del: (p: string, body?: object) => request(app).delete(`/api${p}`).set("authorization", auth).send(body),
       };
     },
   };
@@ -94,16 +94,16 @@ export function user(b: Business | null, role: UserRole, over: { phone?: string 
 
 let legs = 0;
 /** Caller rings in (RING_OWNER mode); returns ids for the caller and owner legs. */
-export async function ringIn(h: Harness, from = CALLER) {
+export async function ringIn(h: Harness, from = CALLER, to = NUMBER) {
   const callerLeg = `caller-leg-${++legs}`;
-  await h.event({ type: "call.incoming", legId: callerLeg, sessionId: `sess-${legs}`, from, to: NUMBER } as never);
+  await h.event({ type: "call.incoming", legId: callerLeg, sessionId: `sess-${legs}`, from, to } as never);
   const dial = h.fake.last("dial");
   return { callerLeg, ownerLeg: dial?.legId ?? "", sessionId: `sess-${legs}`, callId: dial?.opts.state?.callId ?? "" };
 }
 
 /** A full "owner didn't pick up" call. */
-export async function missedCall(h: Harness, from = CALLER) {
-  const legs = await ringIn(h, from);
+export async function missedCall(h: Harness, from = CALLER, to = NUMBER) {
+  const legs = await ringIn(h, from, to);
   await h.event({ type: "call.ended", legId: legs.ownerLeg, cause: "no_answer", state: null } as never);
   return legs;
 }
