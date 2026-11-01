@@ -85,3 +85,26 @@ describe("appointment reminders", () => {
     expect(runAts).toEqual(["2026-10-01T00:45:00.000Z", "2026-10-02T00:45:00.000Z"]);
   });
 });
+
+describe("stuck-job recovery", () => {
+  it("never steals a job another worker is still sending, however overdue it was", async () => {
+    await business();
+    await missedCall(h);
+    h.advance(3 * HOUR);
+    const job = await db.job.findFirstOrThrow();
+    // Another worker claimed it a moment ago (the job itself was due an hour ago).
+    await db.job.update({ where: { id: job.id }, data: { status: "RUNNING", claimedAt: h.clock.now } });
+    await runDueJobs(h.deps);
+    expect(h.fake.smsTo(CALLER)).toHaveLength(1); // only the original text-back
+    expect((await db.job.findUniqueOrThrow({ where: { id: job.id } })).status).toBe("RUNNING");
+  });
+
+  it("does pick up a job whose worker died mid-send", async () => {
+    await business();
+    await missedCall(h);
+    h.advance(3 * HOUR);
+    const job = await db.job.findFirstOrThrow();
+    await db.job.update({ where: { id: job.id }, data: { status: "RUNNING", claimedAt: new Date(h.clock.now.getTime() - 11 * MIN) } });
+    expect(await runDueJobs(h.deps)).toMatchObject({ sent: 1 });
+  });
+});

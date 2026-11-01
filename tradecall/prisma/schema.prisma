@@ -327,6 +327,10 @@ model Job {
   runAt      DateTime
   status     JobStatus @default(PENDING)
   attempts   Int       @default(0)
+  // When a worker picked it up. A RUNNING job is only treated as stuck
+  // (worker died) based on this — never on runAt, which is long past for
+  // any job that was due.
+  claimedAt  DateTime?
   lastError  String?
   createdAt  DateTime  @default(now())
 

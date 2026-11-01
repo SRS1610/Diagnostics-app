@@ -129,7 +129,7 @@ Full guide — automated tests, demo mode with simulated calls, and a real-phone
 
 ```bash
 npm run test:setup   # migrate the test DB (TEST_DATABASE_URL, default tradecall_test)
-npm test             # 102 tests against real Postgres
+npm test             # 104 tests against real Postgres
 npm run typecheck
 ```
 

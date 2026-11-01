@@ -60,13 +60,14 @@ async function run(deps: Deps, jobId: string): Promise<"sent" | "skipped" | "def
 
 export async function runDueJobs(deps: Deps) {
   const now = deps.now();
-  await db.job.updateMany({ where: { status: "RUNNING", runAt: { lt: new Date(now.getTime() - STUCK_MS) } }, data: { status: "PENDING" } });
+  // Recover jobs whose worker died mid-send: RUNNING for longer than STUCK_MS since it was claimed.
+  await db.job.updateMany({ where: { status: "RUNNING", claimedAt: { lt: new Date(now.getTime() - STUCK_MS) } }, data: { status: "PENDING" } });
   // Suspended tenants' jobs stay PENDING and resume if the tenant is reactivated.
   const due = await db.job.findMany({ where: { status: "PENDING", runAt: { lte: now }, business: { status: "ACTIVE" } }, orderBy: { runAt: "asc" }, take: 100 });
   const tally = { sent: 0, skipped: 0, failed: 0 };
 
   for (const job of due) {
-    const claimed = await db.job.updateMany({ where: { id: job.id, status: "PENDING" }, data: { status: "RUNNING", attempts: { increment: 1 } } });
+    const claimed = await db.job.updateMany({ where: { id: job.id, status: "PENDING" }, data: { status: "RUNNING", attempts: { increment: 1 }, claimedAt: now } });
     if (!claimed.count) continue;
     try {
       const outcome = await run(deps, job.id);

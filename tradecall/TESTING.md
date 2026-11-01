@@ -28,7 +28,7 @@ npm run test:setup            # test database
 ## Level 1 — Automated tests
 
 ```bash
-npm test          # 102 tests against a real Postgres
+npm test          # 104 tests against a real Postgres
 npm run typecheck
 ```
 
