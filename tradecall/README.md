@@ -121,17 +121,11 @@ npm run dev                 # http://localhost:4100
 
 Demo logins: `demo@tradecall.test` / `demo-password` (business owner), `jo@tradecall.test` / `demo-password` (admin on the same team), `admin@tradecall.test` / `admin-password` (platform console). The seed also creates two more businesses, one of them suspended.
 
-In demo mode, `/webhooks/fake` accepts unsigned, normalized events, so you can
-simulate a call:
-
-```bash
-W=localhost:4100/webhooks/fake; H='content-type: application/json'
-curl -X POST $W -H "$H" -d '{"eventId":"1","type":"call.incoming","legId":"c1","sessionId":"s1","from":"+15125559001","to":"+15125550199"}'
-curl -X POST $W -H "$H" -d '{"eventId":"2","type":"call.ended","legId":"owner-leg-1","cause":"no_answer","state":null}'
-curl -X POST $W -H "$H" -d '{"eventId":"3","type":"sms.received","providerId":"m1","from":"+15125559001","to":"+15125550199","text":"Water heater leaking"}'
-```
+In demo mode, every text and call step is printed in the server log. Play out calls and texts with `npm run simulate -- missed` (also `hangup`, `voicemail`, `answered`, `conversation`, `text "…"`, `owner-reply "…"`). See [TESTING.md](TESTING.md).
 
 ## Tests
+
+Full guide — automated tests, demo mode with simulated calls, and a real-phone checklist: **[TESTING.md](TESTING.md)**.
 
 ```bash
 npm run test:setup   # migrate the test DB (TEST_DATABASE_URL, default tradecall_test)

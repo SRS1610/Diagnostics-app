@@ -25,7 +25,7 @@ function makeProvider(): Provider {
   console.warn(
     "[provider] TELNYX_API_KEY / TELNYX_PUBLIC_KEY / TELNYX_CONNECTION_ID not all set — DEMO MODE: no real calls or texts, and /webhooks/fake accepts unsigned events.",
   );
-  return new FakeProvider();
+  return new FakeProvider({ log: true });
 }
 
 jwtSecret();

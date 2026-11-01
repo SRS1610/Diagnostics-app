@@ -1,6 +1,7 @@
 // In-memory provider for local demo mode and tests. Records every command
 // so tests can assert exactly what the call flow asked the network to do.
 
+import { randomUUID } from "node:crypto";
 import type { AvailableNumber, CommandOpts, Provider, ProviderEvent } from "./types";
 
 export type Command =
@@ -13,12 +14,16 @@ export type Command =
 
 export class FakeProvider implements Provider {
   readonly name = "fake";
+  /** Demo mode prints every text and call command to the server log so you can follow along. */
+  constructor(private opts: { log?: boolean } = {}) {}
+  private say(line: string) {
+    if (this.opts.log) console.log(`[demo] ${line}`);
+  }
   commands: Command[] = [];
   sms: { from: string; to: string; text: string; providerId: string; messagingProfileId?: string | null }[] = [];
   bought: string[] = [];
   failNextSms = false;
   recordings = new Map<string, Buffer>();
-  private n = 0;
 
   verifyWebhook() {
     return true;
@@ -28,28 +33,36 @@ export class FakeProvider implements Provider {
   }
 
   async dial(args: { to: string; from: string; timeoutSecs: number } & CommandOpts) {
-    const legId = `owner-leg-${++this.n}`;
+    // Unique across restarts: leg ids are stored, and a reused id would collide.
+    const legId = `owner-leg-${randomUUID().slice(0, 8)}`;
     const { to, from, timeoutSecs, ...opts } = args;
     this.commands.push({ cmd: "dial", to, from, timeoutSecs, legId, opts });
+    this.say(`📞 ringing ${to} for ${timeoutSecs}s (owner leg ${legId})`);
     return { legId };
   }
   async answer(legId: string, opts: CommandOpts = {}) {
     this.commands.push({ cmd: "answer", legId, opts });
+    this.say(`answer ${legId}`);
   }
   async bridge(legId: string, otherLegId: string, opts: CommandOpts = {}) {
     this.commands.push({ cmd: "bridge", legId, otherLegId, opts });
+    this.say(`🔗 connected ${legId} ↔ ${otherLegId}`);
   }
   async speak(legId: string, text: string, opts: CommandOpts = {}) {
     this.commands.push({ cmd: "speak", legId, text, opts });
+    this.say(`🔊 to ${legId}: "${text}"`);
   }
   async askForKey(legId: string, prompt: string, timeoutMs: number, opts: CommandOpts = {}) {
     this.commands.push({ cmd: "askForKey", legId, prompt, timeoutMs, opts });
+    this.say(`🔊 to ${legId}: "${prompt}" (waiting for a key)`);
   }
   async record(legId: string, maxSeconds: number, opts: CommandOpts = {}) {
     this.commands.push({ cmd: "record", legId, maxSeconds, opts });
+    this.say(`⏺ recording voicemail on ${legId} (max ${maxSeconds}s)`);
   }
   async hangup(legId: string, opts: CommandOpts = {}) {
     this.commands.push({ cmd: "hangup", legId, opts });
+    this.say(`hang up ${legId}`);
   }
   async downloadRecording(url: string) {
     return { audio: this.recordings.get(url) ?? Buffer.from("ID3-fake-mp3"), mimeType: "audio/mpeg" };
@@ -60,8 +73,9 @@ export class FakeProvider implements Provider {
       this.failNextSms = false;
       throw new Error("Simulated provider failure");
     }
-    const providerId = `msg-${++this.n}`;
+    const providerId = `msg-${randomUUID().slice(0, 8)}`;
     this.sms.push({ ...args, providerId });
+    this.say(`💬 text ${args.from} → ${args.to}:\n         ${args.text.replace(/\n/g, "\n         ")}`);
     return { providerId, status: "queued" };
   }
 
