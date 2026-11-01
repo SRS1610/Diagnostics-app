@@ -175,3 +175,24 @@ describe("settings & numbers", () => {
     await h.api(a).post("/numbers/buy", { phoneNumber: pick }).expect(409);
   });
 });
+
+describe("internal job runner (for hosts that sleep between requests)", () => {
+  const { internalRoutes } = require("../src/http/internal");
+  const express = require("express");
+  const SECRET = "s".repeat(40);
+
+  it("runs due jobs only with the right secret, and doesn't exist without one", async () => {
+    await business();
+    await missedCall(h);
+    h.advance(3 * HOUR);
+    const app = express().use("/internal", internalRoutes(h.deps, SECRET));
+    await request(app).post("/internal/run-jobs").expect(404);
+    await request(app).post("/internal/run-jobs").set("x-internal-secret", "wrong").expect(404);
+    const ok = await request(app).post("/internal/run-jobs").set("x-internal-secret", SECRET).expect(200);
+    expect(ok.body).toMatchObject({ ok: true, jobs: { sent: 1 } });
+    expect(h.fake.smsTo(CALLER).at(-1)!.text).toContain("again");
+
+    const off = express().use("/internal", internalRoutes(h.deps, ""));
+    await request(off).post("/internal/run-jobs").set("x-internal-secret", "").expect(404);
+  });
+});

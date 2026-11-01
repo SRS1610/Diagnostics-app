@@ -28,6 +28,12 @@ const STREETS = ["Elm St", "Oak Ave", "Burnet Rd", "Lamar Blvd", "Manor Rd", "Ri
 const NAMES = ["Maria", "James", "Priya", "Tom", "Keisha", "Luis", "Ann", null, null, null];
 
 async function main() {
+  // --if-empty: only seed a brand-new database (used when a hosted demo
+  // starts, so restarts don't wipe what people changed while trying it).
+  if (process.argv.includes("--if-empty") && (await db.business.count()) > 0) {
+    console.log("Database already has data — not seeding.");
+    return;
+  }
   await db.business.deleteMany({ where: { email: { in: ["demo@tradecall.test", "hello@coolair.test", "ops@brightspark.test"] } } });
   await db.user.deleteMany({ where: { email: "admin@tradecall.test" } });
   const pw = await bcrypt.hash("demo-password", 10);

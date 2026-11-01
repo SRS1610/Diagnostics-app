@@ -4,6 +4,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { ZodError } from "zod";
 import type { Deps } from "./core/deps";
 import { HttpError, apiRoutes } from "./http/api";
+import { internalRoutes } from "./http/internal";
 import { webhookRoutes } from "./http/webhooks";
 
 export function createApp(deps: Deps) {
@@ -13,6 +14,7 @@ export function createApp(deps: Deps) {
 
   app.get("/health", (_req, res) => res.json({ ok: true, provider: deps.provider.name }));
   app.use("/webhooks", webhookRoutes(deps));
+  app.use("/internal", internalRoutes(deps));
   app.use("/api", apiRoutes(deps));
   app.use(express.static(path.join(__dirname, "..", "public")));
 
