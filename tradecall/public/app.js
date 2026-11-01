@@ -94,6 +94,7 @@ async function route() {
   $("#biz-number").textContent = ME.business.phoneNumber ? phone(ME.business.phoneNumber) : "No number yet";
   const manager = ME.role === "OWNER" || ME.role === "ADMIN";
   document.querySelectorAll("[data-manager]").forEach((a) => (a.hidden = !manager));
+  document.querySelectorAll("[data-demo]").forEach((a) => (a.hidden = ME.provider.live || ME.viewAs));
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.dataset.nav === page));
   supportBar();
   notice();
@@ -101,6 +102,7 @@ async function route() {
     if (page === "inbox") await renderInbox(id);
     else if (page === "leads" && id) location.hash = `#/inbox/${id}`; // links from alert texts
     else if (page === "team") await renderTeam();
+    else if (page === "try" && !ME.provider.live) renderTry();
     else if (page === "settings" && manager) await renderSettings();
     else await renderDashboard();
   } catch (e) {
@@ -142,7 +144,7 @@ function notice() {
   } else if (!ME.business.phoneNumber) {
     n.innerHTML = `Missed calls can't be texted back until you connect a number. <a href="#/settings">Set it up →</a>`;
   } else if (!ME.provider.live) {
-    n.textContent = "Demo mode — no phone provider is connected on the server, so calls and texts are simulated.";
+    n.innerHTML = `Demo mode — no real calls or texts. <a href="#/try">Try it: play out a missed call →</a>`;
   } else return (n.hidden = true);
   n.hidden = false;
 }
@@ -1064,4 +1066,53 @@ function dialog({ title, body, html = false, input = null, confirm = "OK", dange
     form.addEventListener("submit", (e) => { e.preventDefault(); if (valid()) done(input ? field.value.trim() : ""); });
     (field || ok).focus();
   });
+}
+
+
+// ---------------- demo: "Try it" ----------------
+
+const TRY = [
+  ["missed", "📵 Missed call", "Nobody picks up. The caller gets a text and can leave a voicemail."],
+  ["hangup", "☎️ Caller hangs up", "They give up after a few rings — still texted back."],
+  ["voicemail", "📼 Your voicemail answers", "Your phone's voicemail picks up but never presses 1 — counts as missed."],
+  ["answered", "✅ You answer", "You press 1 and talk. No text is sent."],
+  ["conversation", "💬 Caller replies", "Missed call, then they answer the 3 questions → urgent alert to your team."],
+  ["text", "✉️ New customer texts in", "Someone texts your number without calling first."],
+  ["owner-reply", "↩️ You reply by text", "You reply to the latest alert from your phone; it goes to the customer."],
+];
+
+function renderTry() {
+  view.innerHTML = `
+    <div class="head"><div><h1>Try it</h1><p>Play out a call or text and see exactly what every phone would get. It runs the real system, so results land in your Inbox and Dashboard too.</p></div></div>
+    <div class="grid cols-2">
+      <section class="panel">
+        <h2>1. Pick what happens</h2>
+        <div class="try-grid">${TRY.map(([id, title, desc]) => `<button class="try-btn" data-sim="${id}"><b>${title}</b><span>${desc}</span></button>`).join("")}</div>
+        <details style="margin-top:12px"><summary class="small">Options</summary>
+          <div class="fgrid" style="margin-top:10px">
+            <label>Caller's number<input id="sim-from" placeholder="new caller each time"><div class="hint">Use the same number twice to see repeat-caller handling.</div></label>
+            <label>Their message<input id="sim-text" placeholder="optional"><div class="hint">For “Caller replies”, “texts in” and “You reply”.</div></label>
+          </div>
+        </details>
+      </section>
+      <section class="panel"><h2>2. What happened</h2><div id="sim-out"><p class="muted">Pick something on the left.</p></div></section>
+    </div>`;
+  view.querySelectorAll("[data-sim]").forEach((b) => b.addEventListener("click", async () => {
+    const out = $("#sim-out");
+    view.querySelectorAll("[data-sim]").forEach((x) => (x.disabled = true));
+    out.innerHTML = `<p class="muted">Running…</p>`;
+    try {
+      const from = $("#sim-from").value.trim(), text = $("#sim-text").value.trim();
+      const r = await api("/demo/simulate", { method: "POST", body: { scenario: b.dataset.sim, ...(from ? { from } : {}), ...(text ? { text } : {}) } });
+      out.innerHTML = `<ol class="sim-steps">${r.steps.map((st) => `<li class="sim-${st.kind}">
+          ${st.who ? `<span class="tag role">${esc(st.who)}</span>` : ""}
+          ${st.kind === "sms" ? `<div class="b out" style="max-width:100%;margin-top:4px">${esc(st.text)}</div>` : `<span>${esc(st.text)}</span>`}</li>`).join("")}</ol>
+        ${r.leadId ? `<p style="margin:12px 0 0"><a class="btn alt" href="#/inbox/${esc(r.leadId)}">Open this lead in the Inbox →</a></p>` : ""}`;
+      ME = await api("/me");
+    } catch (e) {
+      out.innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    } finally {
+      view.querySelectorAll("[data-sim]").forEach((x) => (x.disabled = false));
+    }
+  }));
 }

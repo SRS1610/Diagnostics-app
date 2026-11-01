@@ -37,6 +37,7 @@ export class FakeProvider implements Provider {
     const legId = `owner-leg-${randomUUID().slice(0, 8)}`;
     const { to, from, timeoutSecs, ...opts } = args;
     this.commands.push({ cmd: "dial", to, from, timeoutSecs, legId, opts });
+    if (this.opts.log && this.commands.length > 4000) this.commands.splice(0, 2000);
     this.say(`📞 ringing ${to} for ${timeoutSecs}s (owner leg ${legId})`);
     return { legId };
   }
@@ -75,6 +76,7 @@ export class FakeProvider implements Provider {
     }
     const providerId = `msg-${randomUUID().slice(0, 8)}`;
     this.sms.push({ ...args, providerId });
+    if (this.opts.log && this.sms.length > 2000) this.sms.splice(0, 1000); // bounded on a long-running demo server
     this.say(`💬 text ${args.from} → ${args.to}:\n         ${args.text.replace(/\n/g, "\n         ")}`);
     return { providerId, status: "queued" };
   }

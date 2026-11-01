@@ -23,6 +23,7 @@ import { HttpError, phone } from "./common";
 import { allow, blockWritesWhenReadOnly, requireTenant } from "./guards";
 import { platformRoutes } from "./platform";
 import { teamRoutes } from "./teamRoutes";
+import { SCENARIOS, SimulatorError, simulate, type Scenario } from "../demo/simulator";
 
 export { HttpError } from "./common";
 
@@ -61,6 +62,25 @@ export function apiRoutes(deps: Deps): Router {
 
   r.use(requireTenant, blockWritesWhenReadOnly);
   r.use(teamRoutes(deps));
+
+  // Demo mode only: play out a call or text for the signed-in business.
+  if (deps.provider.name === "fake") {
+    r.post("/demo/simulate", async (req, res) => {
+      const body = z
+        .object({
+          scenario: z.enum(Object.keys(SCENARIOS) as [Scenario, ...Scenario[]]),
+          from: phone.optional(),
+          text: z.string().trim().max(300).optional(),
+        })
+        .parse(req.body);
+      try {
+        res.json(await simulate(deps, await me(res), body.scenario, { from: body.from, text: body.text || undefined }));
+      } catch (err) {
+        if (err instanceof SimulatorError) throw new HttpError(409, err.message);
+        throw err;
+      }
+    });
+  }
 
   r.get("/me", async (_req, res) => {
     const b = await me(res);
